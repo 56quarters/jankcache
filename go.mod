@@ -1,11 +1,10 @@
-module github.com/56quarters/fauxcache
+module github.com/56quarters/jankcache
 
 go 1.18
 
-require github.com/dgraph-io/ristretto v0.1.0
-
 require (
-	github.com/go-kit/log v0.2.0
+	github.com/dgraph-io/ristretto v0.1.0
+	github.com/go-kit/log v0.2.1
 	github.com/prometheus/client_golang v1.13.0
 )
 

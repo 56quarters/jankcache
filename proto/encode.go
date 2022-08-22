@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/56quarters/fauxcache/core"
+	"github.com/56quarters/jankcache/core"
 )
 
 type Encoder struct {

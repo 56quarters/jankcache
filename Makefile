@@ -16,11 +16,11 @@ build-dist: GIT_VERSION = $(shell cat VERSION)
 build-dist: build
 
 clean:
-	rm -f fauxcache
+	rm -f jankcache
 	rm -f VERSION
 
 image: build
-	docker build -t "fauxcache:latest" -t "fauxcache:$(DOCKER_VERSION)" .
+	docker build -t "jankcache:latest" -t "jankcache:$(DOCKER_VERSION)" .
 
 image-dist: build-dist
 image-dist: DOCKER_VERSION = $(shell cat VERSION)

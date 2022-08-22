@@ -1,12 +1,14 @@
 package cache
 
 import (
-	"io"
+	"fmt"
 	"time"
 
 	"github.com/dgraph-io/ristretto"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 
-	"github.com/56quarters/fauxcache/core"
+	"github.com/56quarters/jankcache/proto"
 )
 
 const secondsInThirtyDays = 60 * 60 * 24 * 30
@@ -21,17 +23,21 @@ type Adapter struct {
 	delegate *ristretto.Cache
 	now      func() time.Time
 	wait     bool
+	logger   log.Logger
 }
 
-func NewAdapter(cache *ristretto.Cache) *Adapter {
+func NewAdapter(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	return &Adapter{
 		delegate: cache,
 		now:      time.Now,
 		wait:     true,
+		logger:   logger,
 	}
 }
 
-func (a *Adapter) Get(op core.GetOp) (map[string]*Entry, error) {
+func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
+	level.Debug(a.logger).Log("msg", "get operation", "op", fmt.Sprintf("%+v", op))
+
 	out := make(map[string]*Entry, len(op.Keys))
 
 	for _, k := range op.Keys {
@@ -43,7 +49,9 @@ func (a *Adapter) Get(op core.GetOp) (map[string]*Entry, error) {
 
 	return out, nil
 }
-func (a *Adapter) Set(op core.SetOp) error {
+func (a *Adapter) Set(op proto.SetOp) error {
+	level.Debug(a.logger).Log("msg", "set operation", "op", fmt.Sprintf("%+v", op))
+
 	var ttl int64
 	if op.Expire > secondsInThirtyDays {
 		now := a.now().Unix()
@@ -52,17 +60,11 @@ func (a *Adapter) Set(op core.SetOp) error {
 		ttl = op.Expire
 	}
 
-	limit := io.LimitReader(op.Reader, int64(op.Length))
-	bytes, err := io.ReadAll(limit)
-	if err != nil {
-		return err
-	}
-
-	cost := int64(len(bytes))
+	cost := int64(len(op.Bytes))
 	e := &Entry{
 		Flags:  op.Flags,
 		Unique: 0,
-		Value:  bytes,
+		Value:  op.Bytes,
 	}
 
 	if a.delegate.SetWithTTL(op.Key, e, cost, time.Duration(ttl)*time.Second) && a.wait {
@@ -72,7 +74,9 @@ func (a *Adapter) Set(op core.SetOp) error {
 	return nil
 }
 
-func (a *Adapter) Delete(op core.DeleteOp) error {
+func (a *Adapter) Delete(op proto.DeleteOp) error {
+	level.Debug(a.logger).Log("msg", "delete operation", "op", fmt.Sprintf("%+v", op))
+
 	a.delegate.Del(op.Key)
 	if a.wait {
 		a.delegate.Wait()
