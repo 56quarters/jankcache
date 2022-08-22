@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	setLine  = "set somekey 0 60 13"
+	setLine  = "set somekey 32 60 13"
 	setBytes = `{"foo":"bar"}`
-	getLine  = "get somekey"
+	getLine  = "get somekey2"
 )
 
 func main() {
@@ -33,6 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	e := proto.Encoder{}
 	p := proto.Parser{}
 	c := cache.NewAdapter(r)
 
@@ -63,6 +64,10 @@ func main() {
 	}
 
 	fmt.Printf("GET: %+v\n", res)
-	fmt.Printf("ENTRY: %+v\n", res["somekey"])
-	fmt.Printf("VAL: `%s`", string(res["somekey"].Value))
+
+	for k, v := range res {
+		fmt.Printf("%s", e.Value(k, v.Flags, v.Value))
+	}
+
+	fmt.Printf("%s", e.ValueEnd())
 }
