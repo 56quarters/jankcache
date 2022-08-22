@@ -45,8 +45,7 @@ func main() {
 	for {
 		err := h.Handle(os.Stdin, os.Stdout)
 		if err != nil {
-			level.Error(l).Log("msg", "error while reading input", "err", err)
-			break
+			level.Warn(l).Log("msg", "error while reading input", "err", err)
 		}
 	}
 }

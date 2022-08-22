@@ -40,3 +40,23 @@ func (e *Encoder) ValueUnique(key string, flags uint32, value []byte, unique int
 func (e *Encoder) ValueEnd() []byte {
 	return []byte("END\r\n")
 }
+
+func (e *Encoder) Stored() []byte {
+	return []byte("STORED\r\n")
+}
+
+func (e *Encoder) NotStored() []byte {
+	return []byte("NOT_STORED\r\n")
+}
+
+func (e *Encoder) Exists() []byte {
+	return []byte("EXISTS\r\n")
+}
+
+func (e *Encoder) NotFound() []byte {
+	return []byte("NOT_FOUND\r\n")
+}
+
+func (e *Encoder) Deleted() []byte {
+	return []byte("DELETED\r\n")
+}

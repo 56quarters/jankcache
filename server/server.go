@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 
 	"github.com/go-kit/log"
@@ -49,26 +48,38 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	line := scanner.Text()
 	op, err := h.parser.Parse(line, scanner)
 	if err != nil {
-		panic(err.Error())
+		_, _ = write.Write(h.encoder.Error(err))
+		return nil
 	}
 
 	switch op.Type() {
 	case proto.OpTypeGet:
-		res, err := h.adapter.Get(op.(proto.GetOp))
+		getOp := op.(proto.GetOp)
+		res, err := h.adapter.Get(getOp)
 		if err != nil {
-			panic(err.Error())
+			_, _ = write.Write(h.encoder.Error(err))
 		} else {
-			fmt.Fprintf(write, "RES: %+v\n", res)
+			for k, v := range res {
+				_, _ = write.Write(h.encoder.Value(k, v.Flags, v.Value))
+			}
+
+			_, _ = write.Write(h.encoder.ValueEnd())
 		}
 	case proto.OpTypeSet:
-		err := h.adapter.Set(op.(proto.SetOp))
+		setOp := op.(proto.SetOp)
+		err := h.adapter.Set(setOp)
 		if err != nil {
-			panic(err.Error())
+			_, _ = write.Write(h.encoder.Error(err))
+		} else if !setOp.NoReply {
+			_, _ = write.Write(h.encoder.Stored())
 		}
 	case proto.OpTypeDelete:
-		err := h.adapter.Delete(op.(proto.DeleteOp))
+		delOp := op.(proto.DeleteOp)
+		err := h.adapter.Delete(delOp)
 		if err != nil {
-			fmt.Fprintf(write, "ERR: %s\n", err)
+			_, _ = write.Write(h.encoder.Error(err))
+		} else if !delOp.NoReply {
+			_, _ = write.Write(h.encoder.Deleted())
 		}
 	default:
 		panic("unexpected operation type")
