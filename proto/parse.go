@@ -54,6 +54,7 @@ type Payload interface {
 	// TODO: Make this support a reader or something for payload?
 	//  implement our own version of scanner?
 
+	Err() error
 	Scan() bool
 	Bytes() []byte
 }
@@ -62,9 +63,13 @@ type Parser struct {
 }
 
 func (p *Parser) Parse(line string, payload Payload) (Op, error) {
+	if line == "" {
+		return nil, core.ErrBadCommand
+	}
+
 	parts := strings.Split(line, " ")
 	if len(parts) == 0 {
-		panic("no parts!")
+		return nil, core.ErrBadCommand
 	}
 
 	cmd := strings.ToLower(parts[0])
@@ -79,7 +84,7 @@ func (p *Parser) Parse(line string, payload Payload) (Op, error) {
 		return p.ParseDelete(line, parts)
 	}
 
-	return nil, fmt.Errorf("%w: supported command '%s'", core.ErrServer, line)
+	return nil, fmt.Errorf("%w: unsupported command '%s'", core.ErrServer, line)
 }
 
 func (p *Parser) ParseGet(line string, parts []string) (GetOp, error) {
@@ -111,7 +116,8 @@ func (p *Parser) ParseSet(line string, parts []string, payload Payload) (SetOp, 
 	}
 
 	if !payload.Scan() {
-		return SetOp{}, fmt.Errorf("%w: missing payload of %d bytes, no tokens left", core.ErrClient, length)
+		// TODO: sometimes payload.Err() is nil
+		return SetOp{}, fmt.Errorf("%w: missing payload of %d bytes, no tokens left: %s", core.ErrClient, length, payload.Err())
 	}
 
 	bytes := payload.Bytes()

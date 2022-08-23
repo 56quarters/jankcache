@@ -13,12 +13,6 @@ import (
 	"github.com/56quarters/jankcache/server"
 )
 
-var (
-	setLine  = "set somekey 32 60 13"
-	setBytes = `{"foo":"bar"}`
-	getLine  = "get somekey2"
-)
-
 func main() {
 
 	r, err := ristretto.NewCache(

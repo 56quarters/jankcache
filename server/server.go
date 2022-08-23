@@ -2,10 +2,10 @@ package server
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 
 	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 
 	"github.com/56quarters/jankcache/cache"
 	"github.com/56quarters/jankcache/proto"
@@ -29,26 +29,24 @@ func NewHandler(parser proto.Parser, encoder proto.Encoder, adapter *cache.Adapt
 	}
 }
 
+func (h *Handler) send(bytes []byte, writer io.Writer) {
+	// TODO logging or metrics when writes fail
+	_, _ = writer.Write(bytes)
+}
+
 func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	// TODO: sync.Pool of buffers?
 	scanner := bufio.NewScanner(read)
 	scanner.Buffer(nil, maxReadSizeBytes)
 
 	if !scanner.Scan() {
-		level.Debug(h.logger).Log("msg", "eof while scanning input stream")
-		return io.EOF
-	}
-
-	err := scanner.Err()
-	if err != nil {
-		level.Debug(h.logger).Log("msg", "error while scanning input stream", "err", err)
-		return err
+		return scanner.Err()
 	}
 
 	line := scanner.Text()
 	op, err := h.parser.Parse(line, scanner)
 	if err != nil {
-		_, _ = write.Write(h.encoder.Error(err))
+		h.send(h.encoder.Error(err), write)
 		return nil
 	}
 
@@ -57,32 +55,32 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		getOp := op.(proto.GetOp)
 		res, err := h.adapter.Get(getOp)
 		if err != nil {
-			_, _ = write.Write(h.encoder.Error(err))
+			h.send(h.encoder.Error(err), write)
 		} else {
 			for k, v := range res {
-				_, _ = write.Write(h.encoder.Value(k, v.Flags, v.Value))
+				h.send(h.encoder.Value(k, v.Flags, v.Value), write)
 			}
 
-			_, _ = write.Write(h.encoder.ValueEnd())
+			h.send(h.encoder.ValueEnd(), write)
 		}
 	case proto.OpTypeSet:
 		setOp := op.(proto.SetOp)
 		err := h.adapter.Set(setOp)
 		if err != nil {
-			_, _ = write.Write(h.encoder.Error(err))
+			h.send(h.encoder.Error(err), write)
 		} else if !setOp.NoReply {
-			_, _ = write.Write(h.encoder.Stored())
+			h.send(h.encoder.Stored(), write)
 		}
 	case proto.OpTypeDelete:
 		delOp := op.(proto.DeleteOp)
 		err := h.adapter.Delete(delOp)
 		if err != nil {
-			_, _ = write.Write(h.encoder.Error(err))
+			h.send(h.encoder.Error(err), write)
 		} else if !delOp.NoReply {
-			_, _ = write.Write(h.encoder.Deleted())
+			h.send(h.encoder.Deleted(), write)
 		}
 	default:
-		panic("unexpected operation type")
+		panic(fmt.Sprintf("unexpected operation type: %+v", op))
 	}
 
 	return nil

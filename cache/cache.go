@@ -39,7 +39,6 @@ func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
 	level.Debug(a.logger).Log("msg", "get operation", "op", fmt.Sprintf("%+v", op))
 
 	out := make(map[string]*Entry, len(op.Keys))
-
 	for _, k := range op.Keys {
 		e, ok := a.delegate.Get(k)
 		if ok {
@@ -52,6 +51,7 @@ func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
 func (a *Adapter) Set(op proto.SetOp) error {
 	level.Debug(a.logger).Log("msg", "set operation", "op", fmt.Sprintf("%+v", op))
 
+	// TODO: Test this because it's dumb
 	var ttl int64
 	if op.Expire > secondsInThirtyDays {
 		now := a.now().Unix()
