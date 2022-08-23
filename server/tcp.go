@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+
+	"github.com/56quarters/jankcache/core"
 )
 
 // TODO: Metrics for all this stuff
@@ -59,6 +61,9 @@ func (s *TCP) handle(conn net.Conn) {
 		err := s.handler.Handle(conn, conn)
 		if errors.Is(err, io.EOF) {
 			level.Info(s.logger).Log("msg", "EOF closing connection", "remote", conn.RemoteAddr())
+			break
+		} else if errors.Is(err, core.ErrQuit) {
+			level.Info(s.logger).Log("msg", "client quit", "remote", conn.RemoteAddr())
 			break
 		} else if err != nil {
 			level.Warn(s.logger).Log("msg", "error handling connection", "remote", conn.RemoteAddr(), "err", err)

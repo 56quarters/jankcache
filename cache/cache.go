@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
+	"github.com/56quarters/jankcache/core"
 	"github.com/56quarters/jankcache/proto"
 )
 
@@ -18,6 +19,8 @@ type Entry struct {
 	Unique int64
 	Value  []byte
 }
+
+// TODO: Add a "job queue" chan so that we can support flush delays and `gat` commands (get and queue a job to reset with TTL)
 
 type Adapter struct {
 	delegate *ristretto.Cache
@@ -35,6 +38,39 @@ func NewAdapter(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	}
 }
 
+func (a *Adapter) CacheMemLimit(op proto.CacheMemLimitOp) error {
+	level.Debug(a.logger).Log("msg", "cache_memlimit operation", "op", fmt.Sprintf("%+v", op))
+	a.delegate.UpdateMaxCost(op.Bytes)
+	return nil
+}
+
+func (a *Adapter) Delete(op proto.DeleteOp) error {
+	level.Debug(a.logger).Log("msg", "delete operation", "op", fmt.Sprintf("%+v", op))
+
+	a.delegate.Del(op.Key)
+	if a.wait {
+		a.delegate.Wait()
+	}
+
+	return nil
+}
+
+func (a *Adapter) Flush(op proto.FlushAllOp) error {
+	level.Debug(a.logger).Log("msg", "flush_all operation", "op", fmt.Sprintf("%+v", op))
+
+	if op.Delay != 0 {
+		return fmt.Errorf("%w: flush delay not supported", core.ErrServer)
+	}
+
+	// TODO: This throws away pending gets/sets. Does that matter?
+	a.delegate.Clear()
+	if a.wait {
+		a.delegate.Wait()
+	}
+
+	return nil
+}
+
 func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
 	level.Debug(a.logger).Log("msg", "get operation", "op", fmt.Sprintf("%+v", op))
 
@@ -48,6 +84,11 @@ func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
 
 	return out, nil
 }
+
+func (a *Adapter) GetAndTouch(op proto.GatOp) (map[string]*Entry, error) {
+	return nil, fmt.Errorf("%w: gat not supported", core.ErrServer)
+}
+
 func (a *Adapter) Set(op proto.SetOp) error {
 	level.Debug(a.logger).Log("msg", "set operation", "op", fmt.Sprintf("%+v", op))
 
@@ -68,17 +109,6 @@ func (a *Adapter) Set(op proto.SetOp) error {
 	}
 
 	if a.delegate.SetWithTTL(op.Key, e, cost, time.Duration(ttl)*time.Second) && a.wait {
-		a.delegate.Wait()
-	}
-
-	return nil
-}
-
-func (a *Adapter) Delete(op proto.DeleteOp) error {
-	level.Debug(a.logger).Log("msg", "delete operation", "op", fmt.Sprintf("%+v", op))
-
-	a.delegate.Del(op.Key)
-	if a.wait {
 		a.delegate.Wait()
 	}
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/56quarters/jankcache/core"
 )
@@ -11,13 +12,46 @@ import (
 type OpType int
 
 const (
-	OpTypeGet = iota
-	OpTypeSet
+	OpTypeCacheMemLimit = iota
 	OpTypeDelete
+	OpTypeFlushAll
+	OpTypeGat
+	OpTypeGet
+	OpTypeQuit
+	OpTypeSet
+	OpTypeStats
+	OpTypeVersion
 )
 
 type Op interface {
 	Type() OpType
+}
+
+type CacheMemLimitOp struct {
+	Bytes   int64
+	NoReply bool
+}
+
+func (CacheMemLimitOp) Type() OpType {
+	return OpTypeCacheMemLimit
+}
+
+type DeleteOp struct {
+	Key     string
+	NoReply bool
+}
+
+func (DeleteOp) Type() OpType {
+	return OpTypeDelete
+}
+
+type FlushAllOp struct {
+	Delay   time.Duration
+	NoReply bool
+}
+
+func (FlushAllOp) Type() OpType {
+	return OpTypeFlushAll
 }
 
 type GetOp struct {
@@ -26,6 +60,20 @@ type GetOp struct {
 
 func (GetOp) Type() OpType {
 	return OpTypeGet
+}
+
+type GatOp struct {
+	Keys []string
+}
+
+func (GatOp) Type() OpType {
+	return OpTypeGat
+}
+
+type QuitOp struct{}
+
+func (QuitOp) Type() OpType {
+	return OpTypeQuit
 }
 
 type SetOp struct {
@@ -41,13 +89,16 @@ func (SetOp) Type() OpType {
 	return OpTypeSet
 }
 
-type DeleteOp struct {
-	Key     string
-	NoReply bool
+type StatsOp struct{}
+
+func (StatsOp) Type() OpType {
+	return OpTypeStats
 }
 
-func (DeleteOp) Type() OpType {
-	return OpTypeDelete
+type VersionOp struct{}
+
+func (VersionOp) Type() OpType {
+	return OpTypeVersion
 }
 
 type Payload interface {
@@ -74,17 +125,101 @@ func (p *Parser) Parse(line string, payload Payload) (Op, error) {
 
 	cmd := strings.ToLower(parts[0])
 	switch cmd {
+	case "cache_memlimit":
+		return p.ParseCacheMemLimit(line, parts)
+	case "delete":
+		return p.ParseDelete(line, parts)
+	case "flush_all":
+		return p.ParseFlushAll(line, parts)
+	case "gat":
+		fallthrough
+	case "gats":
+		return p.ParseGat(line, parts)
 	case "get":
 		fallthrough
 	case "gets":
 		return p.ParseGet(line, parts)
+	case "quit":
+		return QuitOp{}, nil
 	case "set":
 		return p.ParseSet(line, parts, payload)
-	case "delete":
-		return p.ParseDelete(line, parts)
+	case "stats":
+		return StatsOp{}, nil
+	case "version":
+		return VersionOp{}, nil
 	}
 
 	return nil, fmt.Errorf("%w: unsupported command '%s'", core.ErrServer, line)
+}
+
+func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitOp, error) {
+	if len(parts) < 2 {
+		return CacheMemLimitOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+	}
+
+	mb, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return CacheMemLimitOp{}, fmt.Errorf("%w: bad cache size: '%s': %s", core.ErrClient, line, err)
+	}
+
+	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
+
+	return CacheMemLimitOp{
+		Bytes:   mb * 1024 * 1024,
+		NoReply: noreply,
+	}, nil
+}
+
+func (p *Parser) ParseDelete(line string, parts []string) (DeleteOp, error) {
+	if len(parts) < 2 {
+		return DeleteOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+	}
+
+	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
+
+	return DeleteOp{
+		Key:     parts[1],
+		NoReply: noreply,
+	}, nil
+}
+
+func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) {
+	if len(parts) == 2 {
+		if "noreply" == strings.ToLower(parts[1]) {
+			return FlushAllOp{NoReply: true}, nil
+		}
+
+		delay, err := strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			return FlushAllOp{}, fmt.Errorf("%w: bad delay: '%s': %s", core.ErrClient, line, err)
+		}
+
+		return FlushAllOp{Delay: time.Duration(delay) * time.Second}, nil
+	}
+
+	if len(parts) == 3 {
+		delay, err := strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			return FlushAllOp{}, fmt.Errorf("%w: bad delay: '%s': %s", core.ErrClient, line, err)
+		}
+
+		noreply := "noreply" == strings.ToLower(parts[2])
+
+		return FlushAllOp{
+			Delay:   time.Duration(delay) * time.Second,
+			NoReply: noreply,
+		}, nil
+	}
+
+	return FlushAllOp{}, nil
+}
+
+func (p *Parser) ParseGat(line string, parts []string) (GatOp, error) {
+	if len(parts) < 2 {
+		return GatOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+	}
+
+	return GatOp{Keys: parts[1:]}, nil
 }
 
 func (p *Parser) ParseGet(line string, parts []string) (GetOp, error) {
@@ -134,18 +269,5 @@ func (p *Parser) ParseSet(line string, parts []string, payload Payload) (SetOp, 
 		Length:  length,
 		NoReply: noreply,
 		Bytes:   bytes,
-	}, nil
-}
-
-func (p *Parser) ParseDelete(line string, parts []string) (DeleteOp, error) {
-	if len(parts) < 2 {
-		return DeleteOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
-	}
-
-	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
-
-	return DeleteOp{
-		Key:     parts[1],
-		NoReply: noreply,
 	}, nil
 }

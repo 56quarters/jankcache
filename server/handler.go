@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/56quarters/jankcache/cache"
+	"github.com/56quarters/jankcache/core"
 	"github.com/56quarters/jankcache/proto"
 )
 
@@ -26,7 +27,7 @@ func NewHandler(parser proto.Parser, encoder proto.Encoder, adapter *cache.Adapt
 }
 
 func (h *Handler) send(bytes []byte, writer io.Writer) {
-	// TODO logging or metrics when writes fail
+	// TODO: logging or metrics when writes fail
 	_, _ = writer.Write(bytes)
 }
 
@@ -55,6 +56,42 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	}
 
 	switch op.Type() {
+	case proto.OpTypeCacheMemLimit:
+		limitOp := op.(proto.CacheMemLimitOp)
+		err := h.adapter.CacheMemLimit(limitOp)
+		if err != nil {
+			h.send(h.encoder.Error(err), write)
+		} else if !limitOp.NoReply {
+			h.send(h.encoder.Ok(), write)
+		}
+	case proto.OpTypeDelete:
+		delOp := op.(proto.DeleteOp)
+		err := h.adapter.Delete(delOp)
+		if err != nil {
+			h.send(h.encoder.Error(err), write)
+		} else if !delOp.NoReply {
+			h.send(h.encoder.Deleted(), write)
+		}
+	case proto.OpTypeFlushAll:
+		flushOp := op.(proto.FlushAllOp)
+		err = h.adapter.Flush(flushOp)
+		if err != nil {
+			h.send(h.encoder.Error(err), write)
+		} else if !flushOp.NoReply {
+			h.send(h.encoder.Ok(), write)
+		}
+	case proto.OpTypeGat:
+		gatOp := op.(proto.GatOp)
+		res, err := h.adapter.GetAndTouch(gatOp)
+		if err != nil {
+			h.send(h.encoder.Error(err), write)
+		} else {
+			for k, v := range res {
+				h.send(h.encoder.Value(k, v.Flags, v.Value), write)
+			}
+
+			h.send(h.encoder.ValueEnd(), write)
+		}
 	case proto.OpTypeGet:
 		getOp := op.(proto.GetOp)
 		res, err := h.adapter.Get(getOp)
@@ -67,6 +104,8 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 
 			h.send(h.encoder.ValueEnd(), write)
 		}
+	case proto.OpTypeQuit:
+		return core.ErrQuit
 	case proto.OpTypeSet:
 		setOp := op.(proto.SetOp)
 		err := h.adapter.Set(setOp)
@@ -75,16 +114,11 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		} else if !setOp.NoReply {
 			h.send(h.encoder.Stored(), write)
 		}
-	case proto.OpTypeDelete:
-		delOp := op.(proto.DeleteOp)
-		err := h.adapter.Delete(delOp)
-		if err != nil {
-			h.send(h.encoder.Error(err), write)
-		} else if !delOp.NoReply {
-			h.send(h.encoder.Deleted(), write)
-		}
+	case proto.OpTypeStats:
+		panic("unimplemented in handler")
+	case proto.OpTypeVersion:
+		panic("unimplemented in handler")
 	default:
-		// TODO: Should this actually panic?
 		panic(fmt.Sprintf("unexpected operation type: %+v", op))
 	}
 

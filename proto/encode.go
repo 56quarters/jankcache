@@ -60,3 +60,7 @@ func (e *Encoder) NotFound() []byte {
 func (e *Encoder) Deleted() []byte {
 	return []byte("DELETED\r\n")
 }
+
+func (e *Encoder) Ok() []byte {
+	return []byte("OK\r\n")
+}
