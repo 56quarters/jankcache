@@ -14,7 +14,6 @@ import (
 )
 
 func main() {
-
 	r, err := ristretto.NewCache(
 		&ristretto.Config{
 			NumCounters: 100000,
@@ -33,13 +32,15 @@ func main() {
 	e := proto.Encoder{}
 	p := proto.Parser{}
 	c := cache.NewAdapter(r, l)
+	handler := server.NewHandler(p, e, c)
 
-	h := server.NewHandler(p, e, c, l)
-
-	for {
-		err := h.Handle(os.Stdin, os.Stdout)
-		if err != nil {
-			level.Warn(l).Log("msg", "error while reading input", "err", err)
-		}
+	cfg := server.TCPConfig{
+		Address: "localhost",
+		Port:    11211,
+	}
+	srv := server.NewTCP(cfg, handler, l)
+	err = srv.Run()
+	if err != nil {
+		level.Error(l).Log("msg", "server error", "err", err)
 	}
 }

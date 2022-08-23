@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/go-kit/log"
-
 	"github.com/56quarters/jankcache/cache"
 	"github.com/56quarters/jankcache/proto"
 )
@@ -17,15 +15,13 @@ type Handler struct {
 	parser  proto.Parser
 	encoder proto.Encoder
 	adapter *cache.Adapter
-	logger  log.Logger
 }
 
-func NewHandler(parser proto.Parser, encoder proto.Encoder, adapter *cache.Adapter, logger log.Logger) *Handler {
+func NewHandler(parser proto.Parser, encoder proto.Encoder, adapter *cache.Adapter) *Handler {
 	return &Handler{
 		parser:  parser,
 		encoder: encoder,
 		adapter: adapter,
-		logger:  logger,
 	}
 }
 
@@ -40,7 +36,15 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	scanner.Buffer(nil, maxReadSizeBytes)
 
 	if !scanner.Scan() {
-		return scanner.Err()
+		err := scanner.Err()
+		if err != nil {
+			return err
+		}
+
+		// Scanner treats EOF as a non-error, but we want to differentiate between EOF
+		// (client won't be sending anything else, so we're done) and various other IO
+		// errors that can occur.
+		return io.EOF
 	}
 
 	line := scanner.Text()
@@ -80,6 +84,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 			h.send(h.encoder.Deleted(), write)
 		}
 	default:
+		// TODO: Should this actually panic?
 		panic(fmt.Sprintf("unexpected operation type: %+v", op))
 	}
 
