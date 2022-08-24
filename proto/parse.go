@@ -1,7 +1,6 @@
 package proto
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -149,17 +148,17 @@ func (p *Parser) Parse(line string, payload Payload) (Op, error) {
 		return VersionOp{}, nil
 	}
 
-	return nil, fmt.Errorf("%w: unsupported command '%s'", core.ErrServer, line)
+	return nil, core.ErrBadCommand
 }
 
 func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitOp, error) {
 	if len(parts) < 2 {
-		return CacheMemLimitOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+		return CacheMemLimitOp{}, core.ClientError("bad cache_memlimit command '%s'", line)
 	}
 
 	mb, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return CacheMemLimitOp{}, fmt.Errorf("%w: bad cache size: '%s': %s", core.ErrClient, line, err)
+		return CacheMemLimitOp{}, core.ClientError("bad cache size: '%s': %s", line, err)
 	}
 
 	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
@@ -172,7 +171,7 @@ func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitO
 
 func (p *Parser) ParseDelete(line string, parts []string) (DeleteOp, error) {
 	if len(parts) < 2 {
-		return DeleteOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+		return DeleteOp{}, core.ClientError("bad delete command '%s'", line)
 	}
 
 	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
@@ -191,7 +190,7 @@ func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) 
 
 		delay, err := strconv.ParseUint(parts[1], 10, 64)
 		if err != nil {
-			return FlushAllOp{}, fmt.Errorf("%w: bad delay: '%s': %s", core.ErrClient, line, err)
+			return FlushAllOp{}, core.ClientError("bad delay: '%s': %s", line, err)
 		}
 
 		return FlushAllOp{Delay: time.Duration(delay) * time.Second}, nil
@@ -200,7 +199,7 @@ func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) 
 	if len(parts) == 3 {
 		delay, err := strconv.ParseUint(parts[1], 10, 64)
 		if err != nil {
-			return FlushAllOp{}, fmt.Errorf("%w: bad delay: '%s': %s", core.ErrClient, line, err)
+			return FlushAllOp{}, core.ClientError(" bad delay: '%s': %s", line, err)
 		}
 
 		noreply := "noreply" == strings.ToLower(parts[2])
@@ -216,7 +215,7 @@ func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) 
 
 func (p *Parser) ParseGat(line string, parts []string) (GatOp, error) {
 	if len(parts) < 2 {
-		return GatOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+		return GatOp{}, core.ClientError("bad gat command '%s'", line)
 	}
 
 	return GatOp{Keys: parts[1:]}, nil
@@ -224,7 +223,7 @@ func (p *Parser) ParseGat(line string, parts []string) (GatOp, error) {
 
 func (p *Parser) ParseGet(line string, parts []string) (GetOp, error) {
 	if len(parts) < 2 {
-		return GetOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+		return GetOp{}, core.ClientError("bad get command '%s'", line)
 	}
 
 	return GetOp{Keys: parts[1:]}, nil
@@ -232,32 +231,36 @@ func (p *Parser) ParseGet(line string, parts []string) (GetOp, error) {
 
 func (p *Parser) ParseSet(line string, parts []string, payload Payload) (SetOp, error) {
 	if len(parts) < 5 {
-		return SetOp{}, fmt.Errorf("%w: bad line '%s'", core.ErrClient, line)
+		return SetOp{}, core.ClientError("bad set command '%s'", line)
 	}
 
 	flags, err := strconv.ParseUint(parts[2], 10, 16)
 	if err != nil {
-		return SetOp{}, fmt.Errorf("%w: bad flags '%s': %s", core.ErrClient, line, err)
+		return SetOp{}, core.ClientError("bad flags '%s': %s", line, err)
 	}
 
 	expire, err := strconv.ParseInt(parts[3], 10, 64)
 	if err != nil {
-		return SetOp{}, fmt.Errorf("%w: bad expire '%s': %s", core.ErrClient, line, err)
+		return SetOp{}, core.ClientError("bad expire '%s': %s", line, err)
 	}
 
 	length, err := strconv.ParseUint(parts[4], 10, 64)
 	if err != nil {
-		return SetOp{}, fmt.Errorf("%w: bad bytes length: '%s': %s", core.ErrClient, line, err)
+		return SetOp{}, core.ClientError("bad bytes length: '%s': %s", line, err)
 	}
 
 	if !payload.Scan() {
-		// TODO: sometimes payload.Err() is nil
-		return SetOp{}, fmt.Errorf("%w: missing payload of %d bytes, no tokens left: %s", core.ErrClient, length, payload.Err())
+		err = payload.Err()
+		if err != nil {
+			return SetOp{}, core.ClientError("missing payload of %d bytes, no tokens left: %s", length, err)
+		}
+
+		return SetOp{}, core.ClientError("missing payload of %d bytes, no tokens left", length)
 	}
 
 	bytes := payload.Bytes()
 	if length != uint64(len(bytes)) {
-		return SetOp{}, fmt.Errorf("%w: mismatch bytes length, expected = %d, actual = %d", core.ErrClient, length, len(bytes))
+		return SetOp{}, core.ClientError("mismatch bytes length, expected = %d, actual = %d", length, len(bytes))
 	}
 
 	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])

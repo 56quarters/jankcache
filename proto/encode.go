@@ -13,11 +13,13 @@ type Encoder struct {
 
 func (e *Encoder) Error(err error) []byte {
 	if errors.Is(err, core.ErrBadCommand) {
-		return []byte("ERROR\r\n")
+		return []byte(fmt.Sprintf("%s\r\n", err))
 	} else if errors.Is(err, core.ErrClient) {
-		return []byte(fmt.Sprintf("CLIENT_ERROR %s\r\n", err.Error()))
+		return []byte(fmt.Sprintf("%s\r\n", err))
+	} else if errors.Is(err, core.ErrServer) {
+		return []byte(fmt.Sprintf("%s\r\n", err))
 	} else {
-		return []byte(fmt.Sprintf("SERVER_ERROR %s\r\n", err.Error()))
+		return []byte(fmt.Sprintf("%s\r\n", core.ServerError(err.Error())))
 	}
 }
 

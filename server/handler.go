@@ -86,6 +86,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		if err != nil {
 			h.send(h.encoder.Error(err), write)
 		} else {
+			// TODO: Handle cas_unique
 			for k, v := range res {
 				h.send(h.encoder.Value(k, v.Flags, v.Value), write)
 			}
@@ -98,6 +99,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		if err != nil {
 			h.send(h.encoder.Error(err), write)
 		} else {
+			// TODO: Handle cas_unique
 			for k, v := range res {
 				h.send(h.encoder.Value(k, v.Flags, v.Value), write)
 			}
@@ -115,9 +117,11 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 			h.send(h.encoder.Stored(), write)
 		}
 	case proto.OpTypeStats:
-		panic("unimplemented in handler")
+		// TODO: Does stats even make sense if we're doing prom metrics?
+		h.send(h.encoder.Error(core.Unimplemented("stats")), write)
 	case proto.OpTypeVersion:
-		panic("unimplemented in handler")
+		// TODO: Implement this
+		h.send(h.encoder.Error(core.Unimplemented("version")), write)
 	default:
 		panic(fmt.Sprintf("unexpected operation type: %+v", op))
 	}
