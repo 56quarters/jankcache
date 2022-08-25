@@ -32,8 +32,8 @@ func (h *Handler) send(bytes []byte, writer io.Writer) {
 }
 
 func (h *Handler) Handle(read io.Reader, write io.Writer) error {
-	// TODO: sync.Pool of buffers?
 	scanner := bufio.NewScanner(read)
+	// TODO: sync.Pool of buffers?
 	scanner.Buffer(nil, maxReadSizeBytes)
 
 	if !scanner.Scan() {
@@ -116,12 +116,6 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		} else if !setOp.NoReply {
 			h.send(h.encoder.Stored(), write)
 		}
-	case proto.OpTypeStats:
-		// TODO: Does stats even make sense if we're doing prom metrics?
-		h.send(h.encoder.Error(core.Unimplemented("stats")), write)
-	case proto.OpTypeVersion:
-		// TODO: Implement this
-		h.send(h.encoder.Error(core.Unimplemented("version")), write)
 	default:
 		panic(fmt.Sprintf("unexpected operation type: %+v", op))
 	}

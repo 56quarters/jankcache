@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -16,7 +17,10 @@ import (
 
 type TCPConfig struct {
 	Address string
-	Port    uint16
+}
+
+func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
+	fs.StringVar(&c.Address, prefix+"address", "localhost:11211", "Address and port for the server to bind to")
 }
 
 type TCP struct {
@@ -34,9 +38,9 @@ func NewTCP(cfg TCPConfig, handler *Handler, logger log.Logger) *TCP {
 }
 
 func (s *TCP) Run() error {
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.config.Address, s.config.Port))
+	l, err := net.Listen("tcp", s.config.Address)
 	if err != nil {
-		return fmt.Errorf("unable to bind to %s:%d: %w", s.config.Address, s.config.Port, err)
+		return fmt.Errorf("unable to bind to %s: %w", s.config.Address, err)
 	}
 
 	for {
@@ -44,6 +48,8 @@ func (s *TCP) Run() error {
 		if err != nil {
 			return fmt.Errorf("unable to accept connection: %w", err)
 		}
+
+		// TODO: Connection limit?
 
 		// TODO: Pool of routines or something? epoll?
 		level.Debug(s.logger).Log("msg", "accepting connection", "remote", conn.RemoteAddr())
@@ -60,10 +66,10 @@ func (s *TCP) handle(conn net.Conn) {
 	for {
 		err := s.handler.Handle(conn, conn)
 		if errors.Is(err, io.EOF) {
-			level.Info(s.logger).Log("msg", "EOF closing connection", "remote", conn.RemoteAddr())
+			level.Debug(s.logger).Log("msg", "EOF closing connection", "remote", conn.RemoteAddr())
 			break
 		} else if errors.Is(err, core.ErrQuit) {
-			level.Info(s.logger).Log("msg", "client quit", "remote", conn.RemoteAddr())
+			level.Debug(s.logger).Log("msg", "client quit", "remote", conn.RemoteAddr())
 			break
 		} else if err != nil {
 			level.Warn(s.logger).Log("msg", "error handling connection", "remote", conn.RemoteAddr(), "err", err)

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"errors"
+	"flag"
 	"os"
 
-	"github.com/dgraph-io/ristretto"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
@@ -13,34 +13,49 @@ import (
 	"github.com/56quarters/jankcache/server"
 )
 
-func main() {
-	r, err := ristretto.NewCache(
-		&ristretto.Config{
-			NumCounters: 100000,
-			MaxCost:     10000,
-			BufferItems: 64,
-			Metrics:     true,
-		},
-	)
+type Config struct {
+	LogLevel level.Value
+	Cache    cache.Config
+	Server   server.TCPConfig
+}
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to create cache: %s", err)
+func (c *Config) RegisterFlags(fs *flag.FlagSet) {
+	c.Cache.RegisterFlags("cache.", fs)
+	c.Server.RegisterFlags("server.", fs)
+}
+
+func main() {
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	fs := flag.NewFlagSet("jankcache", flag.ExitOnError)
+	cfg := Config{}
+	cfg.RegisterFlags(fs)
+
+	err := fs.Parse(os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		os.Exit(0)
+	} else if err != nil {
+		level.Error(logger).Log("msg", "unable to parse configuration options", "err", err)
 		os.Exit(1)
 	}
 
-	l := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	e := proto.Encoder{}
-	p := proto.Parser{}
-	c := cache.NewAdapter(r, l)
-	handler := server.NewHandler(p, e, c)
+	// TODO: Make level configurable
+	logger = log.With(level.NewFilter(logger, level.AllowDebug()), "ts", log.DefaultTimestampUTC)
 
-	cfg := server.TCPConfig{
-		Address: "localhost",
-		Port:    11211,
+	adapter, err := cache.New(cfg.Cache, logger)
+	if err != nil {
+		level.Error(logger).Log("msg", "unable to initialize cache", "err", err)
+		os.Exit(1)
 	}
-	srv := server.NewTCP(cfg, handler, l)
+
+	encoder := proto.Encoder{}
+	parser := proto.Parser{}
+	handler := server.NewHandler(parser, encoder, adapter)
+
+	level.Info(logger).Log("msg", "running server", "address", cfg.Server.Address)
+	srv := server.NewTCP(cfg.Server, handler, logger)
 	err = srv.Run()
 	if err != nil {
-		level.Error(l).Log("msg", "server error", "err", err)
+		level.Error(logger).Log("msg", "server error", "err", err)
+		os.Exit(1)
 	}
 }

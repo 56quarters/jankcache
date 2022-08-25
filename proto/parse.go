@@ -18,8 +18,6 @@ const (
 	OpTypeGet
 	OpTypeQuit
 	OpTypeSet
-	OpTypeStats
-	OpTypeVersion
 )
 
 type Op interface {
@@ -88,18 +86,6 @@ func (SetOp) Type() OpType {
 	return OpTypeSet
 }
 
-type StatsOp struct{}
-
-func (StatsOp) Type() OpType {
-	return OpTypeStats
-}
-
-type VersionOp struct{}
-
-func (VersionOp) Type() OpType {
-	return OpTypeVersion
-}
-
 type Payload interface {
 	// TODO: Make this support a reader or something for payload?
 	//  implement our own version of scanner?
@@ -142,10 +128,6 @@ func (p *Parser) Parse(line string, payload Payload) (Op, error) {
 		return QuitOp{}, nil
 	case "set":
 		return p.ParseSet(line, parts, payload)
-	case "stats":
-		return StatsOp{}, nil
-	case "version":
-		return VersionOp{}, nil
 	}
 
 	return nil, core.ErrBadCommand
