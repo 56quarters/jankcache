@@ -42,7 +42,6 @@ type Adapter struct {
 	delegate *ristretto.Cache
 	casID    uint64
 	now      func() time.Time
-	wait     bool
 	logger   log.Logger
 }
 
@@ -67,7 +66,6 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	return &Adapter{
 		delegate: cache,
 		now:      time.Now,
-		wait:     false,
 		logger:   logger,
 	}
 }
@@ -93,10 +91,6 @@ func (a *Adapter) Cas(op proto.CasOp) error {
 
 func (a *Adapter) Delete(op proto.DeleteOp) error {
 	a.delegate.Del(op.Key)
-	if a.wait {
-		a.delegate.Wait()
-	}
-
 	return nil
 }
 
@@ -106,10 +100,6 @@ func (a *Adapter) Flush(op proto.FlushAllOp) error {
 	}
 
 	a.delegate.Clear()
-	if a.wait {
-		a.delegate.Wait()
-	}
-
 	return nil
 }
 
@@ -138,10 +128,7 @@ func (a *Adapter) Set(op proto.SetOp) error {
 		Value:  op.Bytes,
 	}
 
-	if a.delegate.SetWithTTL(op.Key, entry, entry.Cost(), time.Duration(ttl)*time.Second) && a.wait {
-		a.delegate.Wait()
-	}
-
+	a.delegate.SetWithTTL(op.Key, entry, entry.Cost(), time.Duration(ttl)*time.Second)
 	return nil
 }
 
