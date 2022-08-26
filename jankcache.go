@@ -13,10 +13,11 @@ import (
 	"github.com/56quarters/jankcache/server"
 )
 
+// TODO: pprof endpoint server
+
 type Config struct {
-	LogLevel level.Value
-	Cache    cache.Config
-	Server   server.TCPConfig
+	Cache  cache.Config
+	Server server.TCPConfig
 }
 
 func (c *Config) RegisterFlags(fs *flag.FlagSet) {

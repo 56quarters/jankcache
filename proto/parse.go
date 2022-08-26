@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,8 @@ const (
 	OpTypeQuit
 	OpTypeSet
 )
+
+const maxPayloadSizeBytes = 1024 * 1024
 
 type Op interface {
 	Type() OpType
@@ -86,19 +89,10 @@ func (SetOp) Type() OpType {
 	return OpTypeSet
 }
 
-type Payload interface {
-	// TODO: Make this support a reader or something for payload?
-	//  implement our own version of scanner?
-
-	Err() error
-	Scan() bool
-	Bytes() []byte
-}
-
 type Parser struct {
 }
 
-func (p *Parser) Parse(line string, payload Payload) (Op, error) {
+func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 	if line == "" {
 		return nil, core.ErrBadCommand
 	}
@@ -211,7 +205,7 @@ func (p *Parser) ParseGet(line string, parts []string) (GetOp, error) {
 	return GetOp{Keys: parts[1:]}, nil
 }
 
-func (p *Parser) ParseSet(line string, parts []string, payload Payload) (SetOp, error) {
+func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (SetOp, error) {
 	if len(parts) < 5 {
 		return SetOp{}, core.ClientError("bad set command '%s'", line)
 	}
@@ -231,18 +225,14 @@ func (p *Parser) ParseSet(line string, parts []string, payload Payload) (SetOp, 
 		return SetOp{}, core.ClientError("bad bytes length: '%s': %s", line, err)
 	}
 
-	if !payload.Scan() {
-		err = payload.Err()
-		if err != nil {
-			return SetOp{}, core.ClientError("missing payload of %d bytes, no tokens left: %s", length, err)
-		}
-
-		return SetOp{}, core.ClientError("missing payload of %d bytes, no tokens left", length)
+	if length > maxPayloadSizeBytes {
+		return SetOp{}, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
 	}
 
-	bytes := payload.Bytes()
-	if length != uint64(len(bytes)) {
-		return SetOp{}, core.ClientError("mismatch bytes length, expected = %d, actual = %d", length, len(bytes))
+	bytes := make([]byte, length)
+	n, err := io.ReadFull(payload, bytes)
+	if err != nil {
+		return SetOp{}, core.ClientError("unable to read %d payload bytes, only read %d: %s", length, n, err)
 	}
 
 	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])

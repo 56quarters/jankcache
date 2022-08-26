@@ -4,13 +4,12 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/textproto"
 
 	"github.com/56quarters/jankcache/cache"
 	"github.com/56quarters/jankcache/core"
 	"github.com/56quarters/jankcache/proto"
 )
-
-const maxReadSizeBytes = 1024 * 1024
 
 type Handler struct {
 	parser  proto.Parser
@@ -32,24 +31,18 @@ func (h *Handler) send(bytes []byte, writer io.Writer) {
 }
 
 func (h *Handler) Handle(read io.Reader, write io.Writer) error {
-	scanner := bufio.NewScanner(read)
-	// TODO: sync.Pool of buffers?
-	scanner.Buffer(nil, maxReadSizeBytes)
+	buf := bufio.NewReader(read)
+	text := textproto.NewReader(buf)
 
-	if !scanner.Scan() {
-		err := scanner.Err()
-		if err != nil {
-			return err
-		}
-
-		// Scanner treats EOF as a non-error, but we want to differentiate between EOF
-		// (client won't be sending anything else, so we're done) and various other IO
-		// errors that can occur.
-		return io.EOF
+	line, err := text.ReadLine()
+	if err != nil {
+		return err
 	}
 
-	line := scanner.Text()
-	op, err := h.parser.Parse(line, scanner)
+	// Pass the line we read to the parser as well as the buffered reader since
+	// we'll need to read a payload of bytes (not line delimited) in the case of
+	// a "set" command.
+	op, err := h.parser.Parse(line, buf)
 	if err != nil {
 		h.send(h.encoder.Error(err), write)
 		return nil

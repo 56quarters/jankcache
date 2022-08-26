@@ -13,6 +13,7 @@ import (
 )
 
 const secondsInThirtyDays = 60 * 60 * 24 * 30
+const maxNumCounters = 100_000
 
 type Config struct {
 	MaxSizeMb int64
@@ -40,7 +41,7 @@ type Adapter struct {
 func New(cfg Config, logger log.Logger) (*Adapter, error) {
 	rcache, err := ristretto.NewCache(
 		&ristretto.Config{
-			NumCounters: cfg.MaxSizeMb * 1024 * 1024 * 10,
+			NumCounters: maxNumCounters,
 			MaxCost:     cfg.MaxSizeMb * 1024 * 1024,
 			BufferItems: 64,
 			Metrics:     true,
@@ -64,16 +65,11 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 }
 
 func (a *Adapter) CacheMemLimit(op proto.CacheMemLimitOp) error {
-	// TODO: Metrics
-	//level.Debug(a.logger).Log("msg", "cache_memlimit operation", "op", fmt.Sprintf("%+v", op))
 	a.delegate.UpdateMaxCost(op.Bytes)
 	return nil
 }
 
 func (a *Adapter) Delete(op proto.DeleteOp) error {
-	// TODO: Metrics
-	//level.Debug(a.logger).Log("msg", "delete operation", "op", fmt.Sprintf("%+v", op))
-
 	a.delegate.Del(op.Key)
 	if a.wait {
 		a.delegate.Wait()
@@ -83,9 +79,6 @@ func (a *Adapter) Delete(op proto.DeleteOp) error {
 }
 
 func (a *Adapter) Flush(op proto.FlushAllOp) error {
-	// TODO: Metrics
-	//level.Debug(a.logger).Log("msg", "flush_all operation", "op", fmt.Sprintf("%+v", op))
-
 	if op.Delay != 0 {
 		return fmt.Errorf("%w: flush delay not supported", core.ErrServer)
 	}
@@ -100,9 +93,6 @@ func (a *Adapter) Flush(op proto.FlushAllOp) error {
 }
 
 func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
-	// TODO: Metrics
-	//level.Debug(a.logger).Log("msg", "get operation", "op", fmt.Sprintf("%+v", op))
-
 	out := make(map[string]*Entry, len(op.Keys))
 	for _, k := range op.Keys {
 		e, ok := a.delegate.Get(k)
@@ -120,9 +110,6 @@ func (a *Adapter) GetAndTouch(op proto.GatOp) (map[string]*Entry, error) {
 }
 
 func (a *Adapter) Set(op proto.SetOp) error {
-	// TODO: Metrics
-	//level.Debug(a.logger).Log("msg", "set operation", "op", fmt.Sprintf("%+v", op))
-
 	// TODO: Test this because it's dumb
 	var ttl int64
 	if op.Expire > secondsInThirtyDays {
