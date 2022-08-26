@@ -18,6 +18,10 @@ func (e *Encoder) Error(err error) []byte {
 		return []byte(fmt.Sprintf("%s\r\n", err))
 	} else if errors.Is(err, core.ErrServer) {
 		return []byte(fmt.Sprintf("%s\r\n", err))
+	} else if errors.Is(err, core.ErrExists) {
+		return []byte(fmt.Sprintf("%s\r\n", err))
+	} else if errors.Is(err, core.ErrNotFound) {
+		return []byte(fmt.Sprintf("%s\r\n", err))
 	} else {
 		return []byte(fmt.Sprintf("%s\r\n", core.ServerError(err.Error())))
 	}
@@ -31,7 +35,7 @@ func (e *Encoder) Value(key string, flags uint32, value []byte) []byte {
 	return b.Bytes()
 }
 
-func (e *Encoder) ValueUnique(key string, flags uint32, value []byte, unique int64) []byte {
+func (e *Encoder) ValueUnique(key string, flags uint32, value []byte, unique uint64) []byte {
 	b := bytes.Buffer{}
 	b.WriteString(fmt.Sprintf("VALUE %s %d %d %d\r\n", key, flags, len(value), unique))
 	b.Write(value)

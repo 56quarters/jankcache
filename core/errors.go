@@ -8,6 +8,8 @@ import (
 var (
 	ErrBadCommand = errors.New("ERROR")
 	ErrClient     = errors.New("CLIENT_ERROR")
+	ErrExists     = errors.New("EXISTS")
+	ErrNotFound   = errors.New("NOT_FOUND")
 	ErrServer     = errors.New("SERVER_ERROR")
 
 	ErrQuit = errors.New("quit")

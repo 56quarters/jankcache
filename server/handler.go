@@ -31,6 +31,8 @@ func (h *Handler) send(bytes []byte, writer io.Writer) {
 }
 
 func (h *Handler) Handle(read io.Reader, write io.Writer) error {
+	// TODO: Can we use a pool for the buffer used here? Only needs to live for the
+	//  single request since the parser allocates a buffer to store the "set" payload
 	buf := bufio.NewReader(read)
 	text := textproto.NewReader(buf)
 
@@ -57,6 +59,14 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		} else if !limitOp.NoReply {
 			h.send(h.encoder.Ok(), write)
 		}
+	case proto.OpTypeCas:
+		casOp := op.(proto.CasOp)
+		err := h.adapter.Cas(casOp)
+		if err != nil {
+			h.send(h.encoder.Error(err), write)
+		} else if !casOp.NoReply {
+			h.send(h.encoder.Stored(), write)
+		}
 	case proto.OpTypeDelete:
 		delOp := op.(proto.DeleteOp)
 		err := h.adapter.Delete(delOp)
@@ -79,9 +89,12 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		if err != nil {
 			h.send(h.encoder.Error(err), write)
 		} else {
-			// TODO: Handle cas_unique
 			for k, v := range res {
-				h.send(h.encoder.Value(k, v.Flags, v.Value), write)
+				if gatOp.Unique {
+					h.send(h.encoder.ValueUnique(k, v.Flags, v.Value, v.Unique), write)
+				} else {
+					h.send(h.encoder.Value(k, v.Flags, v.Value), write)
+				}
 			}
 
 			h.send(h.encoder.ValueEnd(), write)
@@ -92,9 +105,12 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		if err != nil {
 			h.send(h.encoder.Error(err), write)
 		} else {
-			// TODO: Handle cas_unique
 			for k, v := range res {
-				h.send(h.encoder.Value(k, v.Flags, v.Value), write)
+				if getOp.Unique {
+					h.send(h.encoder.ValueUnique(k, v.Flags, v.Value, v.Unique), write)
+				} else {
+					h.send(h.encoder.Value(k, v.Flags, v.Value), write)
+				}
 			}
 
 			h.send(h.encoder.ValueEnd(), write)

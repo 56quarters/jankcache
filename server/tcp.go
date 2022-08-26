@@ -50,6 +50,7 @@ func (s *TCP) Run() error {
 		}
 
 		// TODO: Connection limit?
+		// TODO: Idle timeout
 
 		// TODO: Pool of routines or something? epoll?
 		level.Debug(s.logger).Log("msg", "accepting connection", "remote", conn.RemoteAddr())

@@ -3,6 +3,7 @@ package cache
 import (
 	"flag"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/ristretto"
@@ -24,15 +25,22 @@ func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 }
 
 type Entry struct {
+	Unique uint64
 	Flags  uint32
-	Unique int64
 	Value  []byte
+}
+
+func (e Entry) Cost() int64 {
+	return 12 + int64(len(e.Value))
 }
 
 // TODO: Add a "job queue" chan so that we can support flush delays and `gat` commands (get and queue a job to reset with TTL)
 
+// TODO: Metrics for all of this. Profile prom counters vs atomics + pull (functions). Maybe collector? Copy all counters or something per scape?
+
 type Adapter struct {
 	delegate *ristretto.Cache
+	casID    uint64
 	now      func() time.Time
 	wait     bool
 	logger   log.Logger
@@ -44,7 +52,7 @@ func New(cfg Config, logger log.Logger) (*Adapter, error) {
 			NumCounters: maxNumCounters,
 			MaxCost:     cfg.MaxSizeMb * 1024 * 1024,
 			BufferItems: 64,
-			Metrics:     true,
+			Metrics:     false,
 		},
 	)
 
@@ -59,7 +67,7 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	return &Adapter{
 		delegate: cache,
 		now:      time.Now,
-		wait:     true,
+		wait:     false,
 		logger:   logger,
 	}
 }
@@ -67,6 +75,20 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 func (a *Adapter) CacheMemLimit(op proto.CacheMemLimitOp) error {
 	a.delegate.UpdateMaxCost(op.Bytes)
 	return nil
+}
+
+func (a *Adapter) Cas(op proto.CasOp) error {
+	e, ok := a.delegate.Get(op.Key)
+	if !ok {
+		return core.ErrNotFound
+	}
+
+	existing := e.(*Entry)
+	if existing.Unique != op.Unique {
+		return core.ErrExists
+	}
+
+	return a.Set(op.SetOp)
 }
 
 func (a *Adapter) Delete(op proto.DeleteOp) error {
@@ -83,7 +105,6 @@ func (a *Adapter) Flush(op proto.FlushAllOp) error {
 		return fmt.Errorf("%w: flush delay not supported", core.ErrServer)
 	}
 
-	// TODO: This throws away pending gets/sets. Does that matter?
 	a.delegate.Clear()
 	if a.wait {
 		a.delegate.Wait()
@@ -110,25 +131,33 @@ func (a *Adapter) GetAndTouch(op proto.GatOp) (map[string]*Entry, error) {
 }
 
 func (a *Adapter) Set(op proto.SetOp) error {
-	// TODO: Test this because it's dumb
-	var ttl int64
-	if op.Expire > secondsInThirtyDays {
-		now := a.now().Unix()
-		ttl = op.Expire - now
-	} else {
-		ttl = op.Expire
-	}
-
-	cost := int64(len(op.Bytes))
-	e := &Entry{
+	ttl := a.ttl(op.Expire)
+	entry := &Entry{
+		Unique: a.unique(),
 		Flags:  op.Flags,
-		Unique: 0,
 		Value:  op.Bytes,
 	}
 
-	if a.delegate.SetWithTTL(op.Key, e, cost, time.Duration(ttl)*time.Second) && a.wait {
+	if a.delegate.SetWithTTL(op.Key, entry, entry.Cost(), time.Duration(ttl)*time.Second) && a.wait {
 		a.delegate.Wait()
 	}
 
 	return nil
+}
+
+func (a *Adapter) unique() uint64 {
+	return atomic.AddUint64(&a.casID, 1)
+}
+
+func (a *Adapter) ttl(expire int64) int64 {
+	// TODO: Test this because it's dumb
+	var ttl int64
+	if expire > secondsInThirtyDays {
+		now := a.now().Unix()
+		ttl = expire - now
+	} else {
+		ttl = expire
+	}
+
+	return ttl
 }

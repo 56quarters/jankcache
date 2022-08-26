@@ -13,6 +13,7 @@ type OpType int
 
 const (
 	OpTypeCacheMemLimit = iota
+	OpTypeCas
 	OpTypeDelete
 	OpTypeFlushAll
 	OpTypeGat
@@ -36,6 +37,15 @@ func (CacheMemLimitOp) Type() OpType {
 	return OpTypeCacheMemLimit
 }
 
+type CasOp struct {
+	SetOp
+	Unique uint64
+}
+
+func (CasOp) Type() OpType {
+	return OpTypeCas
+}
+
 type DeleteOp struct {
 	Key     string
 	NoReply bool
@@ -55,7 +65,8 @@ func (FlushAllOp) Type() OpType {
 }
 
 type GetOp struct {
-	Keys []string
+	Keys   []string
+	Unique bool
 }
 
 func (GetOp) Type() OpType {
@@ -63,7 +74,8 @@ func (GetOp) Type() OpType {
 }
 
 type GatOp struct {
-	Keys []string
+	Keys   []string
+	Unique bool
 }
 
 func (GatOp) Type() OpType {
@@ -79,8 +91,7 @@ func (QuitOp) Type() OpType {
 type SetOp struct {
 	Key     string
 	Flags   uint32
-	Expire  int64  // TODO: Size???
-	Length  uint64 // TODO: Size???
+	Expire  int64 // TODO: Size???
 	NoReply bool
 	Bytes   []byte
 }
@@ -102,22 +113,25 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 		return nil, core.ErrBadCommand
 	}
 
+	// TODO: cases for legit commands that aren't implemented
 	cmd := strings.ToLower(parts[0])
 	switch cmd {
 	case "cache_memlimit":
 		return p.ParseCacheMemLimit(line, parts)
+	case "cas":
+		return p.ParseCas(line, parts, payload)
 	case "delete":
 		return p.ParseDelete(line, parts)
 	case "flush_all":
 		return p.ParseFlushAll(line, parts)
 	case "gat":
-		fallthrough
+		return p.ParseGat(line, parts, false)
 	case "gats":
-		return p.ParseGat(line, parts)
+		return p.ParseGat(line, parts, true)
 	case "get":
-		fallthrough
+		return p.ParseGet(line, parts, false)
 	case "gets":
-		return p.ParseGet(line, parts)
+		return p.ParseGet(line, parts, true)
 	case "quit":
 		return QuitOp{}, nil
 	case "set":
@@ -142,6 +156,55 @@ func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitO
 	return CacheMemLimitOp{
 		Bytes:   mb * 1024 * 1024,
 		NoReply: noreply,
+	}, nil
+}
+
+func (p *Parser) ParseCas(line string, parts []string, payload io.Reader) (CasOp, error) {
+	if len(parts) < 6 {
+		return CasOp{}, core.ClientError("bad cas command '%s'", line)
+	}
+
+	flags, err := strconv.ParseUint(parts[2], 10, 32)
+	if err != nil {
+		return CasOp{}, core.ClientError("bad flags '%s': %s", line, err)
+	}
+
+	expire, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		return CasOp{}, core.ClientError("bad expire '%s': %s", line, err)
+	}
+
+	length, err := strconv.ParseUint(parts[4], 10, 64)
+	if err != nil {
+		return CasOp{}, core.ClientError("bad bytes length: '%s': %s", line, err)
+	}
+
+	if length > maxPayloadSizeBytes {
+		return CasOp{}, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
+	}
+
+	unique, err := strconv.ParseUint(parts[5], 10, 64)
+	if err != nil {
+		return CasOp{}, core.ClientError("bad cas_unique: '%s': %s", line, err)
+	}
+
+	bytes := make([]byte, length)
+	n, err := io.ReadFull(payload, bytes)
+	if err != nil {
+		return CasOp{}, core.ClientError("unable to read %d payload bytes, only read %d: %s", length, n, err)
+	}
+
+	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])
+
+	return CasOp{
+		SetOp: SetOp{
+			Key:     parts[1],
+			Flags:   uint32(flags),
+			Expire:  expire,
+			NoReply: noreply,
+			Bytes:   bytes,
+		},
+		Unique: unique,
 	}, nil
 }
 
@@ -189,20 +252,20 @@ func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) 
 	return FlushAllOp{}, nil
 }
 
-func (p *Parser) ParseGat(line string, parts []string) (GatOp, error) {
+func (p *Parser) ParseGat(line string, parts []string, unique bool) (GatOp, error) {
 	if len(parts) < 2 {
 		return GatOp{}, core.ClientError("bad gat command '%s'", line)
 	}
 
-	return GatOp{Keys: parts[1:]}, nil
+	return GatOp{Keys: parts[1:], Unique: unique}, nil
 }
 
-func (p *Parser) ParseGet(line string, parts []string) (GetOp, error) {
+func (p *Parser) ParseGet(line string, parts []string, unique bool) (GetOp, error) {
 	if len(parts) < 2 {
 		return GetOp{}, core.ClientError("bad get command '%s'", line)
 	}
 
-	return GetOp{Keys: parts[1:]}, nil
+	return GetOp{Keys: parts[1:], Unique: unique}, nil
 }
 
 func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (SetOp, error) {
@@ -241,7 +304,6 @@ func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (SetOp
 		Key:     parts[1],
 		Flags:   uint32(flags),
 		Expire:  expire,
-		Length:  length,
 		NoReply: noreply,
 		Bytes:   bytes,
 	}, nil

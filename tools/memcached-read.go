@@ -13,7 +13,7 @@ func main() {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	client := memcache.New("localhost:11211")
 
-	for batch := 0; batch < 1000; batch += 1 {
+	for batch := 0; batch < 10000; batch += 1 {
 		start := batch * 100
 		var keys []string
 

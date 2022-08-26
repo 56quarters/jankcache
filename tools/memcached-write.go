@@ -179,7 +179,7 @@ func main() {
 	client := memcache.New("localhost:11211")
 
 	var i uint64
-	for x := 0; x < 100000; x++ {
+	for x := 0; x < 1000000; x++ {
 		err := client.Set(&memcache.Item{
 			Key:        fmt.Sprintf("somekey%d", i),
 			Value:      []byte(payload),
@@ -192,7 +192,6 @@ func main() {
 			return
 		}
 
-		//time.Sleep(time.Millisecond)
 		i++
 	}
 }
