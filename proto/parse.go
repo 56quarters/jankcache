@@ -146,15 +146,19 @@ func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitO
 		return CacheMemLimitOp{}, core.ClientError("bad cache_memlimit command '%s'", line)
 	}
 
-	mb, err := strconv.ParseInt(parts[1], 10, 64)
+	mb, err := strconv.ParseUint(parts[1], 10, 64)
 	if err != nil {
-		return CacheMemLimitOp{}, core.ClientError("bad cache size: '%s': %s", line, err)
+		return CacheMemLimitOp{}, core.ClientError("bad cache size: invalid syntax '%s'", line)
+	}
+
+	if mb < 1 {
+		return CacheMemLimitOp{}, core.ClientError("bad cache size: must be at least 1 mb, got %d mb", mb)
 	}
 
 	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
 
 	return CacheMemLimitOp{
-		Bytes:   mb * 1024 * 1024,
+		Bytes:   int64(mb * 1024 * 1024),
 		NoReply: noreply,
 	}, nil
 }
@@ -176,7 +180,7 @@ func (p *Parser) ParseCas(line string, parts []string, payload io.Reader) (CasOp
 
 	length, err := strconv.ParseUint(parts[4], 10, 64)
 	if err != nil {
-		return CasOp{}, core.ClientError("bad bytes length: '%s': %s", line, err)
+		return CasOp{}, core.ClientError("bad bytes length '%s': %s", line, err)
 	}
 
 	if length > maxPayloadSizeBytes {
@@ -185,7 +189,7 @@ func (p *Parser) ParseCas(line string, parts []string, payload io.Reader) (CasOp
 
 	unique, err := strconv.ParseUint(parts[5], 10, 64)
 	if err != nil {
-		return CasOp{}, core.ClientError("bad cas_unique: '%s': %s", line, err)
+		return CasOp{}, core.ClientError("bad cas_unique '%s': %s", line, err)
 	}
 
 	bytes := make([]byte, length)
@@ -285,7 +289,7 @@ func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (SetOp
 
 	length, err := strconv.ParseUint(parts[4], 10, 64)
 	if err != nil {
-		return SetOp{}, core.ClientError("bad bytes length: '%s': %s", line, err)
+		return SetOp{}, core.ClientError("bad bytes length '%s': %s", line, err)
 	}
 
 	if length > maxPayloadSizeBytes {
