@@ -25,7 +25,7 @@ type TCPConfig struct {
 
 func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.StringVar(&c.Address, prefix+"address", "localhost:11211", "Address and port for the server to bind to")
-	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed")
+	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed. Setting to 0 disables idle timeout")
 }
 
 type TCP struct {
@@ -88,13 +88,15 @@ func (s *TCP) handle(conn net.Conn) {
 	}()
 
 	for {
-		err := conn.SetDeadline(s.now().Add(s.config.IdleTimeout))
-		if err != nil {
-			level.Error(s.logger).Log("msg", "unable to set idle timeout on connection", "remote", conn.RemoteAddr(), "err", err)
-			return
+		if s.config.IdleTimeout > 0 {
+			err := conn.SetDeadline(s.now().Add(s.config.IdleTimeout))
+			if err != nil {
+				level.Error(s.logger).Log("msg", "unable to set idle timeout on connection", "remote", conn.RemoteAddr(), "err", err)
+				return
+			}
 		}
 
-		err = s.handler.Handle(conn, conn)
+		err := s.handler.Handle(conn, conn)
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			level.Debug(s.logger).Log("msg", "closing idle connection", "remote", conn.RemoteAddr())
 			return
