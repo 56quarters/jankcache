@@ -24,8 +24,8 @@ type TCPConfig struct {
 }
 
 func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
-	fs.StringVar(&c.Address, prefix+"address", "localhost:11211", "Address and port for the server to bind to")
-	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed. Setting to 0 disables idle timeout")
+	fs.StringVar(&c.Address, prefix+"address", "localhost:11211", "Address and port for the cache server to bind to")
+	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed. Set to 0 to disable")
 }
 
 type TCP struct {
