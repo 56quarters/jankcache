@@ -41,7 +41,6 @@ func (e *Encoder) Value(key string, flags uint32, value []byte) *bytes.Buffer {
 	b := e.buffers.Get().(*bytes.Buffer)
 	b.Reset()
 
-	b.Grow(64 + len(value))
 	b.WriteString(fmt.Sprintf("VALUE %s %d %d\r\n", key, flags, len(value)))
 	b.Write(value)
 	b.WriteString("\r\n")
@@ -52,14 +51,13 @@ func (e *Encoder) ValueUnique(key string, flags uint32, value []byte, unique uin
 	b := e.buffers.Get().(*bytes.Buffer)
 	b.Reset()
 
-	b.Grow(64 + len(value))
 	b.WriteString(fmt.Sprintf("VALUE %s %d %d %d\r\n", key, flags, len(value), unique))
 	b.Write(value)
 	b.WriteString("\r\n")
 	return b
 }
 
-func (e *Encoder) ReturnBuffer(buf *bytes.Buffer) {
+func (e *Encoder) PutBuffer(buf *bytes.Buffer) {
 	e.buffers.Put(buf)
 }
 

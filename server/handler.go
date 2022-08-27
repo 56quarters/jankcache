@@ -13,6 +13,11 @@ import (
 	"github.com/56quarters/jankcache/proto"
 )
 
+const (
+	readBufSize  = 65_535  // 64KB
+	writeBufSize = 262_144 // 256KB
+)
+
 type Handler struct {
 	parser  *proto.Parser
 	encoder *proto.Encoder
@@ -27,10 +32,10 @@ func NewHandler(parser *proto.Parser, encoder *proto.Encoder, adapter *cache.Ada
 		encoder: encoder,
 		adapter: adapter,
 		readers: sync.Pool{
-			New: func() any { return &bufio.Reader{} },
+			New: func() any { return bufio.NewReaderSize(nil, readBufSize) },
 		},
 		writers: sync.Pool{
-			New: func() any { return &bufio.Writer{} },
+			New: func() any { return bufio.NewWriterSize(nil, writeBufSize) },
 		},
 	}
 }
@@ -110,12 +115,11 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 				var b *bytes.Buffer
 				if getOp.Unique {
 					b = h.encoder.ValueUnique(k, v.Flags, v.Value, v.Unique)
-					h.send(b.Bytes(), bufWrite)
 				} else {
 					b = h.encoder.Value(k, v.Flags, v.Value)
-					h.send(b.Bytes(), bufWrite)
 				}
-				h.encoder.ReturnBuffer(b)
+				h.send(b.Bytes(), bufWrite)
+				h.encoder.PutBuffer(b)
 			}
 
 			h.send(h.encoder.ValueEnd(), bufWrite)
