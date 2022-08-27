@@ -2,9 +2,11 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net/textproto"
+	"sync"
 
 	"github.com/56quarters/jankcache/cache"
 	"github.com/56quarters/jankcache/core"
@@ -12,16 +14,24 @@ import (
 )
 
 type Handler struct {
-	parser  proto.Parser
-	encoder proto.Encoder
+	parser  *proto.Parser
+	encoder *proto.Encoder
 	adapter *cache.Adapter
+	readers sync.Pool
+	writers sync.Pool
 }
 
-func NewHandler(parser proto.Parser, encoder proto.Encoder, adapter *cache.Adapter) *Handler {
+func NewHandler(parser *proto.Parser, encoder *proto.Encoder, adapter *cache.Adapter) *Handler {
 	return &Handler{
 		parser:  parser,
 		encoder: encoder,
 		adapter: adapter,
+		readers: sync.Pool{
+			New: func() any { return &bufio.Reader{} },
+		},
+		writers: sync.Pool{
+			New: func() any { return &bufio.Writer{} },
+		},
 	}
 }
 
@@ -31,11 +41,18 @@ func (h *Handler) send(bytes []byte, writer io.Writer) {
 }
 
 func (h *Handler) Handle(read io.Reader, write io.Writer) error {
-	// TODO: Can we use a pool for the buffer used here? Only needs to live for the
-	//  single request since the parser allocates a buffer to store the "set" payload
-	buf := bufio.NewReader(read)
-	text := textproto.NewReader(buf)
+	bufRead := h.readers.Get().(*bufio.Reader)
+	bufWrite := h.writers.Get().(*bufio.Writer)
+	bufRead.Reset(read)
+	bufWrite.Reset(write)
 
+	defer func() {
+		_ = bufWrite.Flush()
+		h.readers.Put(bufRead)
+		h.writers.Put(bufWrite)
+	}()
+
+	text := textproto.NewReader(bufRead)
 	line, err := text.ReadLine()
 	if err != nil {
 		return err
@@ -43,10 +60,10 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 
 	// Pass the line we read to the parser as well as the buffered reader since
 	// we'll need to read a payload of bytes (not line delimited) in the case of
-	// a "set" command.
-	op, err := h.parser.Parse(line, buf)
+	// a "set" or "cas" command.
+	op, err := h.parser.Parse(line, bufRead)
 	if err != nil {
-		h.send(h.encoder.Error(err), write)
+		h.send(h.encoder.Error(err), bufWrite)
 		return nil
 	}
 
@@ -55,65 +72,53 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		limitOp := op.(proto.CacheMemLimitOp)
 		err := h.adapter.CacheMemLimit(limitOp)
 		if err != nil {
-			h.send(h.encoder.Error(err), write)
+			h.send(h.encoder.Error(err), bufWrite)
 		} else if !limitOp.NoReply {
-			h.send(h.encoder.Ok(), write)
+			h.send(h.encoder.Ok(), bufWrite)
 		}
 	case proto.OpTypeCas:
 		casOp := op.(proto.CasOp)
 		err := h.adapter.Cas(casOp)
 		if err != nil {
-			h.send(h.encoder.Error(err), write)
+			h.send(h.encoder.Error(err), bufWrite)
 		} else if !casOp.NoReply {
-			h.send(h.encoder.Stored(), write)
+			h.send(h.encoder.Stored(), bufWrite)
 		}
 	case proto.OpTypeDelete:
 		delOp := op.(proto.DeleteOp)
 		err := h.adapter.Delete(delOp)
 		if err != nil {
-			h.send(h.encoder.Error(err), write)
+			h.send(h.encoder.Error(err), bufWrite)
 		} else if !delOp.NoReply {
-			h.send(h.encoder.Deleted(), write)
+			h.send(h.encoder.Deleted(), bufWrite)
 		}
 	case proto.OpTypeFlushAll:
 		flushOp := op.(proto.FlushAllOp)
 		err = h.adapter.Flush(flushOp)
 		if err != nil {
-			h.send(h.encoder.Error(err), write)
+			h.send(h.encoder.Error(err), bufWrite)
 		} else if !flushOp.NoReply {
-			h.send(h.encoder.Ok(), write)
-		}
-	case proto.OpTypeGat:
-		gatOp := op.(proto.GatOp)
-		res, err := h.adapter.GetAndTouch(gatOp)
-		if err != nil {
-			h.send(h.encoder.Error(err), write)
-		} else {
-			for k, v := range res {
-				if gatOp.Unique {
-					h.send(h.encoder.ValueUnique(k, v.Flags, v.Value, v.Unique), write)
-				} else {
-					h.send(h.encoder.Value(k, v.Flags, v.Value), write)
-				}
-			}
-
-			h.send(h.encoder.ValueEnd(), write)
+			h.send(h.encoder.Ok(), bufWrite)
 		}
 	case proto.OpTypeGet:
 		getOp := op.(proto.GetOp)
 		res, err := h.adapter.Get(getOp)
 		if err != nil {
-			h.send(h.encoder.Error(err), write)
+			h.send(h.encoder.Error(err), bufWrite)
 		} else {
 			for k, v := range res {
+				var b *bytes.Buffer
 				if getOp.Unique {
-					h.send(h.encoder.ValueUnique(k, v.Flags, v.Value, v.Unique), write)
+					b = h.encoder.ValueUnique(k, v.Flags, v.Value, v.Unique)
+					h.send(b.Bytes(), bufWrite)
 				} else {
-					h.send(h.encoder.Value(k, v.Flags, v.Value), write)
+					b = h.encoder.Value(k, v.Flags, v.Value)
+					h.send(b.Bytes(), bufWrite)
 				}
+				h.encoder.ReturnBuffer(b)
 			}
 
-			h.send(h.encoder.ValueEnd(), write)
+			h.send(h.encoder.ValueEnd(), bufWrite)
 		}
 	case proto.OpTypeQuit:
 		return core.ErrQuit
@@ -121,9 +126,9 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		setOp := op.(proto.SetOp)
 		err := h.adapter.Set(setOp)
 		if err != nil {
-			h.send(h.encoder.Error(err), write)
+			h.send(h.encoder.Error(err), bufWrite)
 		} else if !setOp.NoReply {
-			h.send(h.encoder.Stored(), write)
+			h.send(h.encoder.Stored(), bufWrite)
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operation type: %+v", op))

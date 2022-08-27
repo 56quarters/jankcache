@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"sync/atomic"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -16,42 +19,63 @@ import (
 // TODO: Metrics for all this stuff
 
 type TCPConfig struct {
-	Address string
+	Address     string
+	IdleTimeout time.Duration
 }
 
 func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.StringVar(&c.Address, prefix+"address", "localhost:11211", "Address and port for the server to bind to")
+	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed")
 }
 
 type TCP struct {
-	config  TCPConfig
-	handler *Handler
-	logger  log.Logger
+	config   TCPConfig
+	handler  *Handler
+	logger   log.Logger
+	listener net.Listener
+	stopping int32
+
+	now func() time.Time
 }
 
-func NewTCP(cfg TCPConfig, handler *Handler, logger log.Logger) *TCP {
+func NewTCP(config TCPConfig, handler *Handler, logger log.Logger) *TCP {
 	return &TCP{
-		config:  cfg,
+		config:  config,
 		handler: handler,
 		logger:  logger,
+		now:     time.Now,
+	}
+}
+
+func (s *TCP) Stop() {
+	atomic.CompareAndSwapInt32(&s.stopping, 0, 1)
+
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			level.Warn(s.logger).Log("msg", "error closing listener", "err", err)
+		}
 	}
 }
 
 func (s *TCP) Run() error {
-	l, err := net.Listen("tcp", s.config.Address)
+	var err error
+	s.listener, err = net.Listen("tcp", s.config.Address)
 	if err != nil {
 		return fmt.Errorf("unable to bind to %s: %w", s.config.Address, err)
 	}
 
 	for {
-		conn, err := l.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
+			// If the server is stopping, ignore any error here since it's expected
+			if atomic.LoadInt32(&s.stopping) != 0 {
+				return nil
+			}
+
 			return fmt.Errorf("unable to accept connection: %w", err)
 		}
 
 		// TODO: Connection limit?
-		// TODO: Idle timeout
-
 		// TODO: Pool of routines or something? epoll?
 		level.Debug(s.logger).Log("msg", "accepting connection", "remote", conn.RemoteAddr())
 		go s.handle(conn)
@@ -60,21 +84,29 @@ func (s *TCP) Run() error {
 
 func (s *TCP) handle(conn net.Conn) {
 	defer func() {
-		// TODO: io.ReadAll?
 		_ = conn.Close()
 	}()
 
 	for {
-		err := s.handler.Handle(conn, conn)
-		if errors.Is(err, io.EOF) {
-			level.Debug(s.logger).Log("msg", "EOF closing connection", "remote", conn.RemoteAddr())
-			break
+		err := conn.SetDeadline(s.now().Add(s.config.IdleTimeout))
+		if err != nil {
+			level.Error(s.logger).Log("msg", "unable to set idle timeout on connection", "remote", conn.RemoteAddr(), "err", err)
+			return
+		}
+
+		err = s.handler.Handle(conn, conn)
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			level.Debug(s.logger).Log("msg", "closing idle connection", "remote", conn.RemoteAddr())
+			return
+		} else if errors.Is(err, io.EOF) {
+			level.Debug(s.logger).Log("msg", "closing EOF connection", "remote", conn.RemoteAddr())
+			return
 		} else if errors.Is(err, core.ErrQuit) {
 			level.Debug(s.logger).Log("msg", "client quit", "remote", conn.RemoteAddr())
-			break
+			return
 		} else if err != nil {
 			level.Warn(s.logger).Log("msg", "error handling connection", "remote", conn.RemoteAddr(), "err", err)
-			break
+			return
 		}
 	}
 }

@@ -18,11 +18,13 @@ import (
 type Config struct {
 	Cache  cache.Config
 	Server server.TCPConfig
+	Debug  server.DebugConfig
 }
 
 func (c *Config) RegisterFlags(fs *flag.FlagSet) {
 	c.Cache.RegisterFlags("cache.", fs)
 	c.Server.RegisterFlags("server.", fs)
+	c.Debug.RegisterFlags("debug.", fs)
 }
 
 func main() {
@@ -48,15 +50,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	encoder := proto.Encoder{}
-	parser := proto.Parser{}
+	encoder := proto.NewEncoder()
+	parser := proto.NewParser()
 	handler := server.NewHandler(parser, encoder, adapter)
+
+	if cfg.Debug.Enabled {
+		level.Info(logger).Log("msg", "running debug server", "address", cfg.Debug.Address)
+		dbg := server.NewDebug(cfg.Debug, logger)
+		go func() {
+			_ = dbg.Run()
+		}()
+	}
 
 	level.Info(logger).Log("msg", "running server", "address", cfg.Server.Address)
 	srv := server.NewTCP(cfg.Server, handler, logger)
 	err = srv.Run()
+
+	var ret int
 	if err != nil {
 		level.Error(logger).Log("msg", "server error", "err", err)
-		os.Exit(1)
+		ret = 1
+	} else {
+		level.Info(logger).Log("msg", "stopping server")
 	}
+
+	os.Exit(ret)
 }

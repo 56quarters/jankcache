@@ -16,7 +16,6 @@ const (
 	OpTypeCas
 	OpTypeDelete
 	OpTypeFlushAll
-	OpTypeGat
 	OpTypeGet
 	OpTypeQuit
 	OpTypeSet
@@ -73,15 +72,6 @@ func (GetOp) Type() OpType {
 	return OpTypeGet
 }
 
-type GatOp struct {
-	Keys   []string
-	Unique bool
-}
-
-func (GatOp) Type() OpType {
-	return OpTypeGat
-}
-
 type QuitOp struct{}
 
 func (QuitOp) Type() OpType {
@@ -101,6 +91,10 @@ func (SetOp) Type() OpType {
 }
 
 type Parser struct {
+}
+
+func NewParser() *Parser {
+	return &Parser{}
 }
 
 func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
@@ -124,10 +118,6 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 		return p.ParseDelete(line, parts)
 	case "flush_all":
 		return p.ParseFlushAll(line, parts)
-	case "gat":
-		return p.ParseGat(line, parts, false)
-	case "gats":
-		return p.ParseGat(line, parts, true)
 	case "get":
 		return p.ParseGet(line, parts, false)
 	case "gets":
@@ -226,6 +216,9 @@ func (p *Parser) ParseDelete(line string, parts []string) (DeleteOp, error) {
 }
 
 func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) {
+	// TODO: This sucks, get rid of the duplicate code
+	// TODO: Put a cap on the delay since it will likely require a goroutine?
+
 	if len(parts) == 2 {
 		if "noreply" == strings.ToLower(parts[1]) {
 			return FlushAllOp{NoReply: true}, nil
@@ -254,14 +247,6 @@ func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) 
 	}
 
 	return FlushAllOp{}, nil
-}
-
-func (p *Parser) ParseGat(line string, parts []string, unique bool) (GatOp, error) {
-	if len(parts) < 2 {
-		return GatOp{}, core.ClientError("bad gat command '%s'", line)
-	}
-
-	return GatOp{Keys: parts[1:], Unique: unique}, nil
 }
 
 func (p *Parser) ParseGet(line string, parts []string, unique bool) (GetOp, error) {

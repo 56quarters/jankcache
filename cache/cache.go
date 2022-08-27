@@ -31,6 +31,7 @@ type Entry struct {
 }
 
 func (e Entry) Cost() int64 {
+	// unique (8 bytes) + flags (4 bytes) + payload
 	return 12 + int64(len(e.Value))
 }
 
@@ -95,6 +96,9 @@ func (a *Adapter) Delete(op proto.DeleteOp) error {
 }
 
 func (a *Adapter) Flush(op proto.FlushAllOp) error {
+	// TODO: Support flush delay. time.After? Job queue? Something else?
+	//  Should we only allow one flush delay to be active at a time to avoid
+	//  excessive resource usage?
 	if op.Delay != 0 {
 		return fmt.Errorf("%w: flush delay not supported", core.ErrServer)
 	}
@@ -113,11 +117,6 @@ func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
 	}
 
 	return out, nil
-}
-
-func (a *Adapter) GetAndTouch(op proto.GatOp) (map[string]*Entry, error) {
-	// TODO: implement this once the cache has a job queue
-	return nil, core.Unimplemented("gat")
 }
 
 func (a *Adapter) Set(op proto.SetOp) error {
