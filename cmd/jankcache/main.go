@@ -13,8 +13,6 @@ import (
 	"github.com/56quarters/jankcache/server"
 )
 
-// TODO: pprof endpoint server
-
 type Config struct {
 	Cache  cache.Config
 	Server server.TCPConfig

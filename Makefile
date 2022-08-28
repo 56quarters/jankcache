@@ -8,8 +8,11 @@ default: build
 
 .PHONY: build build-dist clean image image-dist lint test version
 
+cmd/jankcache/jankcache:
+
+
 build:
-	env CGO_ENABLED=$(USE_CGO) go build -ldflags="-X 'main.Branch=$(GIT_BRANCH)' -X 'main.Revision=$(GIT_REVISION)' -X 'main.Version=$(GIT_VERSION)'"
+	env CGO_ENABLED=$(USE_CGO) go build -o cmd/jankcache/jankcache -ldflags="-X 'main.Branch=$(GIT_BRANCH)' -X 'main.Revision=$(GIT_REVISION)' -X 'main.Version=$(GIT_VERSION)'" cmd/jankcache/main.go
 
 build-dist: version
 build-dist: GIT_VERSION = $(shell cat VERSION)

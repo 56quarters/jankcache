@@ -65,7 +65,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 
 	// Pass the line we read to the parser as well as the buffered reader since
 	// we'll need to read a payload of bytes (not line delimited) in the case of
-	// a "set" or "cas" command.
+	// a "set" command.
 	op, err := h.parser.Parse(line, bufRead)
 	if err != nil {
 		h.send(h.encoder.Error(err), bufWrite)
@@ -114,7 +114,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 				h.encoder.PutBuffer(b)
 			}
 
-			h.send(h.encoder.ValueEnd(), bufWrite)
+			h.send(h.encoder.End(), bufWrite)
 		}
 	case proto.OpTypeQuit:
 		return core.ErrQuit

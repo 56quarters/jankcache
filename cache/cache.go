@@ -2,7 +2,6 @@ package cache
 
 import (
 	"flag"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -40,14 +39,14 @@ func (e Entry) Cost() int64 {
 type Adapter struct {
 	delegate *ristretto.Cache
 	casID    uint64
-	now      func() time.Time
+	time     core.Time
 	logger   log.Logger
 }
 
 func New(cfg Config, logger log.Logger) (*Adapter, error) {
 	rcache, err := ristretto.NewCache(
 		&ristretto.Config{
-			NumCounters: maxNumCounters,
+			NumCounters: maxNumCounters, // TODO: Expose this config?
 			MaxCost:     cfg.MaxSizeMb * 1024 * 1024,
 			BufferItems: 64,
 			Metrics:     false,
@@ -64,8 +63,8 @@ func New(cfg Config, logger log.Logger) (*Adapter, error) {
 func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	return &Adapter{
 		delegate: cache,
-		now:      time.Now,
 		logger:   logger,
+		time:     core.DefaultTime{},
 	}
 }
 
@@ -80,14 +79,12 @@ func (a *Adapter) Delete(op proto.DeleteOp) error {
 }
 
 func (a *Adapter) Flush(op proto.FlushAllOp) error {
-	// TODO: Support flush delay. time.After? Job queue? Something else?
-	//  Should we only allow one flush delay to be active at a time to avoid
-	//  excessive resource usage?
-	if op.Delay != 0 {
-		return fmt.Errorf("%w: flush delay not supported", core.ErrServer)
+	if op.Delay > 0 {
+		a.time.AfterFunc(op.Delay, a.delegate.Clear)
+	} else {
+		a.delegate.Clear()
 	}
 
-	a.delegate.Clear()
 	return nil
 }
 
@@ -123,7 +120,7 @@ func (a *Adapter) ttl(expire int64) int64 {
 	// TODO: Test this because it's dumb
 	var ttl int64
 	if expire > secondsInThirtyDays {
-		now := a.now().Unix()
+		now := a.time.Now().Unix()
 		ttl = expire - now
 	} else {
 		ttl = expire

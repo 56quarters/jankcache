@@ -18,6 +18,7 @@ const (
 	OpTypeGet
 	OpTypeQuit
 	OpTypeSet
+	OpTypeStats
 )
 
 const maxPayloadSizeBytes = 1024 * 1024
@@ -97,7 +98,6 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 		return nil, core.ErrBadCommand
 	}
 
-	// TODO: cases for legit commands that aren't implemented
 	cmd := strings.ToLower(parts[0])
 	switch cmd {
 	case "cache_memlimit":
@@ -114,6 +114,12 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 		return QuitOp{}, nil
 	case "set":
 		return p.ParseSet(line, parts, payload)
+	case "add", "append", "cas", "decr", "gat", "gats", "incr", "lru", "lru_crawler",
+		"prepend", "replace", "shutdown", "slabs", "stats", "touch", "version", "watch":
+		// Valid memcached commands that we've chosen not to implement because they
+		// aren't needed for our usecase or their implementation would impact performance
+		// or complexity of the commands we do support (or both).
+		return nil, core.Unimplemented(cmd)
 	}
 
 	return nil, core.ErrBadCommand
@@ -156,7 +162,6 @@ func (p *Parser) ParseDelete(line string, parts []string) (DeleteOp, error) {
 
 func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) {
 	// TODO: This sucks, get rid of the duplicate code
-	// TODO: Put a cap on the delay since it will likely require a goroutine?
 
 	if len(parts) == 2 {
 		if "noreply" == strings.ToLower(parts[1]) {

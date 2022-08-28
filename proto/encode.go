@@ -61,7 +61,7 @@ func (e *Encoder) PutBuffer(buf *bytes.Buffer) {
 	e.buffers.Put(buf)
 }
 
-func (e *Encoder) ValueEnd() []byte {
+func (e *Encoder) End() []byte {
 	return []byte("END\r\n")
 }
 
