@@ -28,7 +28,7 @@ func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed. Set to 0 to disable")
 }
 
-type TCP struct {
+type TCPServer struct {
 	config   TCPConfig
 	handler  *Handler
 	logger   log.Logger
@@ -38,8 +38,8 @@ type TCP struct {
 	now func() time.Time
 }
 
-func NewTCP(config TCPConfig, handler *Handler, logger log.Logger) *TCP {
-	return &TCP{
+func NewTCPServer(config TCPConfig, handler *Handler, logger log.Logger) *TCPServer {
+	return &TCPServer{
 		config:  config,
 		handler: handler,
 		logger:  logger,
@@ -47,7 +47,7 @@ func NewTCP(config TCPConfig, handler *Handler, logger log.Logger) *TCP {
 	}
 }
 
-func (s *TCP) Stop() {
+func (s *TCPServer) Stop() {
 	atomic.CompareAndSwapInt32(&s.stopping, 0, 1)
 
 	if s.listener != nil {
@@ -57,7 +57,7 @@ func (s *TCP) Stop() {
 	}
 }
 
-func (s *TCP) Run() error {
+func (s *TCPServer) Run() error {
 	var err error
 	s.listener, err = net.Listen("tcp", s.config.Address)
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *TCP) Run() error {
 	}
 }
 
-func (s *TCP) handle(conn net.Conn) {
+func (s *TCPServer) handle(conn net.Conn) {
 	defer func() {
 		_ = conn.Close()
 	}()

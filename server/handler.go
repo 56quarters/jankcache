@@ -81,14 +81,6 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		} else if !limitOp.NoReply {
 			h.send(h.encoder.Ok(), bufWrite)
 		}
-	case proto.OpTypeCas:
-		casOp := op.(proto.CasOp)
-		err := h.adapter.Cas(casOp)
-		if err != nil {
-			h.send(h.encoder.Error(err), bufWrite)
-		} else if !casOp.NoReply {
-			h.send(h.encoder.Stored(), bufWrite)
-		}
 	case proto.OpTypeDelete:
 		delOp := op.(proto.DeleteOp)
 		err := h.adapter.Delete(delOp)

@@ -13,7 +13,6 @@ type OpType int
 
 const (
 	OpTypeCacheMemLimit = iota
-	OpTypeCas
 	OpTypeDelete
 	OpTypeFlushAll
 	OpTypeGet
@@ -34,15 +33,6 @@ type CacheMemLimitOp struct {
 
 func (CacheMemLimitOp) Type() OpType {
 	return OpTypeCacheMemLimit
-}
-
-type CasOp struct {
-	SetOp
-	Unique uint64
-}
-
-func (CasOp) Type() OpType {
-	return OpTypeCas
 }
 
 type DeleteOp struct {
@@ -112,8 +102,6 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 	switch cmd {
 	case "cache_memlimit":
 		return p.ParseCacheMemLimit(line, parts)
-	case "cas":
-		return p.ParseCas(line, parts, payload)
 	case "delete":
 		return p.ParseDelete(line, parts)
 	case "flush_all":
@@ -150,55 +138,6 @@ func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitO
 	return CacheMemLimitOp{
 		Bytes:   int64(mb * 1024 * 1024),
 		NoReply: noreply,
-	}, nil
-}
-
-func (p *Parser) ParseCas(line string, parts []string, payload io.Reader) (CasOp, error) {
-	if len(parts) < 6 {
-		return CasOp{}, core.ClientError("bad cas command '%s'", line)
-	}
-
-	flags, err := strconv.ParseUint(parts[2], 10, 32)
-	if err != nil {
-		return CasOp{}, core.ClientError("bad flags '%s': %s", line, err)
-	}
-
-	expire, err := strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		return CasOp{}, core.ClientError("bad expire '%s': %s", line, err)
-	}
-
-	length, err := strconv.ParseUint(parts[4], 10, 64)
-	if err != nil {
-		return CasOp{}, core.ClientError("bad bytes length '%s': %s", line, err)
-	}
-
-	if length > maxPayloadSizeBytes {
-		return CasOp{}, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
-	}
-
-	unique, err := strconv.ParseUint(parts[5], 10, 64)
-	if err != nil {
-		return CasOp{}, core.ClientError("bad cas_unique '%s': %s", line, err)
-	}
-
-	bytes := make([]byte, length)
-	n, err := io.ReadFull(payload, bytes)
-	if err != nil {
-		return CasOp{}, core.ClientError("unable to read %d payload bytes, only read %d: %s", length, n, err)
-	}
-
-	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])
-
-	return CasOp{
-		SetOp: SetOp{
-			Key:     parts[1],
-			Flags:   uint32(flags),
-			Expire:  expire,
-			NoReply: noreply,
-			Bytes:   bytes,
-		},
-		Unique: unique,
 	}, nil
 }
 

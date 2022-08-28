@@ -43,27 +43,26 @@ func main() {
 
 	// TODO: Make level configurable
 	logger = log.With(level.NewFilter(logger, level.AllowDebug()), "ts", log.DefaultTimestampUTC)
-
 	adapter, err := cache.New(cfg.Cache, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "unable to initialize cache", "err", err)
 		os.Exit(1)
 	}
 
-	encoder := proto.NewEncoder()
-	parser := proto.NewParser()
-	handler := server.NewHandler(parser, encoder, adapter)
-
 	if cfg.Debug.Enabled {
 		level.Info(logger).Log("msg", "running debug server", "address", cfg.Debug.Address)
-		dbg := server.NewDebug(cfg.Debug, logger)
+		dbg := server.NewDebugServer(cfg.Debug, logger)
 		go func() {
 			_ = dbg.Run()
 		}()
 	}
 
+	encoder := proto.NewEncoder()
+	parser := proto.NewParser()
+	handler := server.NewHandler(parser, encoder, adapter)
+
 	level.Info(logger).Log("msg", "running server", "address", cfg.Server.Address)
-	srv := server.NewTCP(cfg.Server, handler, logger)
+	srv := server.NewTCPServer(cfg.Server, handler, logger)
 	err = srv.Run()
 
 	var ret int

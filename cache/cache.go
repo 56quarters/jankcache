@@ -35,8 +35,6 @@ func (e Entry) Cost() int64 {
 	return 12 + int64(len(e.Value))
 }
 
-// TODO: Add a "job queue" chan so that we can support flush delays and `gat` commands (get and queue a job to reset with TTL)
-
 // TODO: Metrics for all of this. Profile prom counters vs atomics + pull (functions). Maybe collector? Copy all counters or something per scape?
 
 type Adapter struct {
@@ -74,20 +72,6 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 func (a *Adapter) CacheMemLimit(op proto.CacheMemLimitOp) error {
 	a.delegate.UpdateMaxCost(op.Bytes)
 	return nil
-}
-
-func (a *Adapter) Cas(op proto.CasOp) error {
-	e, ok := a.delegate.Get(op.Key)
-	if !ok {
-		return core.ErrNotFound
-	}
-
-	existing := e.(*Entry)
-	if existing.Unique != op.Unique {
-		return core.ErrExists
-	}
-
-	return a.Set(op.SetOp)
 }
 
 func (a *Adapter) Delete(op proto.DeleteOp) error {
