@@ -72,7 +72,7 @@ func (QuitOp) Type() OpType {
 type SetOp struct {
 	Key     string
 	Flags   uint32
-	Expire  int64 // TODO: Size???
+	Expire  int64
 	NoReply bool
 	Bytes   []byte
 }

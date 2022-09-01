@@ -24,15 +24,14 @@ func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 }
 
 type Entry struct {
-	Unique     uint64
-	Expiration time.Duration
-	Flags      uint32
-	Value      []byte
+	Unique uint64
+	Flags  uint32
+	Value  []byte
 }
 
 func (e Entry) Cost() int64 {
-	// unique (8 bytes) + expiration (8 bytes) + flags (4 bytes) + payload
-	return 20 + int64(len(e.Value))
+	// unique (8 bytes) + flags (4 bytes) + payload
+	return 12 + int64(len(e.Value))
 }
 
 // TODO: Metrics for all of this. Profile prom counters vs atomics + pull (functions). Maybe collector? Copy all counters or something per scape?
@@ -104,10 +103,9 @@ func (a *Adapter) Get(op *proto.GetOp) (map[string]*Entry, error) {
 func (a *Adapter) Set(op *proto.SetOp) error {
 	ttl := a.ttl(op.Expire)
 	entry := &Entry{
-		Unique:     a.unique(),
-		Flags:      op.Flags,
-		Value:      op.Bytes,
-		Expiration: ttl,
+		Unique: a.unique(),
+		Flags:  op.Flags,
+		Value:  op.Bytes,
 	}
 
 	a.delegate.SetWithTTL(op.Key, entry, entry.Cost(), ttl)

@@ -41,7 +41,7 @@ func (l *LocalClient) Get(key string) (*memcache.Item, error) {
 	}
 
 	if len(res) == 0 {
-		return nil, nil
+		return nil, memcache.ErrCacheMiss
 	}
 
 	return res[key], nil
@@ -56,10 +56,9 @@ func (l *LocalClient) GetMulti(keys []string) (map[string]*memcache.Item, error)
 	out := make(map[string]*memcache.Item, len(res))
 	for k, v := range res {
 		out[k] = &memcache.Item{
-			Key:        k,
-			Value:      v.Value,
-			Flags:      v.Flags,
-			Expiration: int32(v.Expiration.Seconds()),
+			Key:   k,
+			Value: v.Value,
+			Flags: v.Flags,
 		}
 	}
 
