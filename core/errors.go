@@ -24,5 +24,5 @@ func ServerError(msg string, a ...any) error {
 }
 
 func Unimplemented(cmd string) error {
-	return fmt.Errorf("%s unimplemented", cmd)
+	return ServerError("%s unimplemented", cmd)
 }

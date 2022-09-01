@@ -24,14 +24,15 @@ func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 }
 
 type Entry struct {
-	Unique uint64
-	Flags  uint32
-	Value  []byte
+	Unique     uint64
+	Expiration time.Duration
+	Flags      uint32
+	Value      []byte
 }
 
 func (e Entry) Cost() int64 {
-	// unique (8 bytes) + flags (4 bytes) + payload
-	return 12 + int64(len(e.Value))
+	// unique (8 bytes) + expiration (8 bytes) + flags (4 bytes) + payload
+	return 20 + int64(len(e.Value))
 }
 
 // TODO: Metrics for all of this. Profile prom counters vs atomics + pull (functions). Maybe collector? Copy all counters or something per scape?
@@ -68,17 +69,17 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	}
 }
 
-func (a *Adapter) CacheMemLimit(op proto.CacheMemLimitOp) error {
+func (a *Adapter) CacheMemLimit(op *proto.CacheMemLimitOp) error {
 	a.delegate.UpdateMaxCost(op.Bytes)
 	return nil
 }
 
-func (a *Adapter) Delete(op proto.DeleteOp) error {
+func (a *Adapter) Delete(op *proto.DeleteOp) error {
 	a.delegate.Del(op.Key)
 	return nil
 }
 
-func (a *Adapter) Flush(op proto.FlushAllOp) error {
+func (a *Adapter) Flush(op *proto.FlushAllOp) error {
 	if op.Delay > 0 {
 		a.time.AfterFunc(op.Delay, a.delegate.Clear)
 	} else {
@@ -88,7 +89,7 @@ func (a *Adapter) Flush(op proto.FlushAllOp) error {
 	return nil
 }
 
-func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
+func (a *Adapter) Get(op *proto.GetOp) (map[string]*Entry, error) {
 	out := make(map[string]*Entry, len(op.Keys))
 	for _, k := range op.Keys {
 		e, ok := a.delegate.Get(k)
@@ -100,15 +101,16 @@ func (a *Adapter) Get(op proto.GetOp) (map[string]*Entry, error) {
 	return out, nil
 }
 
-func (a *Adapter) Set(op proto.SetOp) error {
+func (a *Adapter) Set(op *proto.SetOp) error {
 	ttl := a.ttl(op.Expire)
 	entry := &Entry{
-		Unique: a.unique(),
-		Flags:  op.Flags,
-		Value:  op.Bytes,
+		Unique:     a.unique(),
+		Flags:      op.Flags,
+		Value:      op.Bytes,
+		Expiration: ttl,
 	}
 
-	a.delegate.SetWithTTL(op.Key, entry, entry.Cost(), time.Duration(ttl)*time.Second)
+	a.delegate.SetWithTTL(op.Key, entry, entry.Cost(), ttl)
 	return nil
 }
 
@@ -116,7 +118,7 @@ func (a *Adapter) unique() uint64 {
 	return atomic.AddUint64(&a.casID, 1)
 }
 
-func (a *Adapter) ttl(expire int64) int64 {
+func (a *Adapter) ttl(expire int64) time.Duration {
 	// TODO: Test this because it's dumb
 	var ttl int64
 	if expire > secondsInThirtyDays {
@@ -126,5 +128,5 @@ func (a *Adapter) ttl(expire int64) int64 {
 		ttl = expire
 	}
 
-	return ttl
+	return time.Duration(ttl) * time.Second
 }

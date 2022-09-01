@@ -125,115 +125,115 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 	return nil, core.ErrBadCommand
 }
 
-func (p *Parser) ParseCacheMemLimit(line string, parts []string) (CacheMemLimitOp, error) {
+func (p *Parser) ParseCacheMemLimit(line string, parts []string) (*CacheMemLimitOp, error) {
 	if len(parts) < 2 {
-		return CacheMemLimitOp{}, core.ClientError("bad cache_memlimit command '%s'", line)
+		return nil, core.ClientError("bad cache_memlimit command '%s'", line)
 	}
 
 	mb, err := strconv.ParseUint(parts[1], 10, 64)
 	if err != nil {
-		return CacheMemLimitOp{}, core.ClientError("bad cache size: invalid syntax '%s'", line)
+		return nil, core.ClientError("bad cache size: invalid syntax '%s'", line)
 	}
 
 	if mb < 1 {
-		return CacheMemLimitOp{}, core.ClientError("bad cache size: must be at least 1 mb, got %d mb", mb)
+		return nil, core.ClientError("bad cache size: must be at least 1 mb, got %d mb", mb)
 	}
 
 	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
 
-	return CacheMemLimitOp{
+	return &CacheMemLimitOp{
 		Bytes:   int64(mb * 1024 * 1024),
 		NoReply: noreply,
 	}, nil
 }
 
-func (p *Parser) ParseDelete(line string, parts []string) (DeleteOp, error) {
+func (p *Parser) ParseDelete(line string, parts []string) (*DeleteOp, error) {
 	if len(parts) < 2 {
-		return DeleteOp{}, core.ClientError("bad delete command '%s'", line)
+		return nil, core.ClientError("bad delete command '%s'", line)
 	}
 
 	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
 
-	return DeleteOp{
+	return &DeleteOp{
 		Key:     parts[1],
 		NoReply: noreply,
 	}, nil
 }
 
-func (p *Parser) ParseFlushAll(line string, parts []string) (FlushAllOp, error) {
+func (p *Parser) ParseFlushAll(line string, parts []string) (*FlushAllOp, error) {
 	// TODO: This sucks, get rid of the duplicate code
 
 	if len(parts) == 2 {
 		if "noreply" == strings.ToLower(parts[1]) {
-			return FlushAllOp{NoReply: true}, nil
+			return &FlushAllOp{NoReply: true}, nil
 		}
 
 		delay, err := strconv.ParseUint(parts[1], 10, 64)
 		if err != nil {
-			return FlushAllOp{}, core.ClientError("bad delay: '%s': %s", line, err)
+			return nil, core.ClientError("bad delay: '%s': %s", line, err)
 		}
 
-		return FlushAllOp{Delay: time.Duration(delay) * time.Second}, nil
+		return &FlushAllOp{Delay: time.Duration(delay) * time.Second}, nil
 	}
 
 	if len(parts) == 3 {
 		delay, err := strconv.ParseUint(parts[1], 10, 64)
 		if err != nil {
-			return FlushAllOp{}, core.ClientError(" bad delay: '%s': %s", line, err)
+			return nil, core.ClientError(" bad delay: '%s': %s", line, err)
 		}
 
 		noreply := "noreply" == strings.ToLower(parts[2])
 
-		return FlushAllOp{
+		return &FlushAllOp{
 			Delay:   time.Duration(delay) * time.Second,
 			NoReply: noreply,
 		}, nil
 	}
 
-	return FlushAllOp{}, nil
+	return &FlushAllOp{}, nil
 }
 
-func (p *Parser) ParseGet(line string, parts []string, unique bool) (GetOp, error) {
+func (p *Parser) ParseGet(line string, parts []string, unique bool) (*GetOp, error) {
 	if len(parts) < 2 {
-		return GetOp{}, core.ClientError("bad get command '%s'", line)
+		return nil, core.ClientError("bad get command '%s'", line)
 	}
 
-	return GetOp{Keys: parts[1:], Unique: unique}, nil
+	return &GetOp{Keys: parts[1:], Unique: unique}, nil
 }
 
-func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (SetOp, error) {
+func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
 	if len(parts) < 5 {
-		return SetOp{}, core.ClientError("bad set command '%s'", line)
+		return nil, core.ClientError("bad set command '%s'", line)
 	}
 
 	flags, err := strconv.ParseUint(parts[2], 10, 16)
 	if err != nil {
-		return SetOp{}, core.ClientError("bad flags '%s': %s", line, err)
+		return nil, core.ClientError("bad flags '%s': %s", line, err)
 	}
 
 	expire, err := strconv.ParseInt(parts[3], 10, 64)
 	if err != nil {
-		return SetOp{}, core.ClientError("bad expire '%s': %s", line, err)
+		return nil, core.ClientError("bad expire '%s': %s", line, err)
 	}
 
 	length, err := strconv.ParseUint(parts[4], 10, 64)
 	if err != nil {
-		return SetOp{}, core.ClientError("bad bytes length '%s': %s", line, err)
+		return nil, core.ClientError("bad bytes length '%s': %s", line, err)
 	}
 
 	if length > maxPayloadSizeBytes {
-		return SetOp{}, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
+		return nil, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
 	}
 
 	bytes := make([]byte, length)
 	n, err := io.ReadFull(payload, bytes)
 	if err != nil {
-		return SetOp{}, core.ClientError("unable to read %d payload bytes, only read %d: %s", length, n, err)
+		return nil, core.ClientError("unable to read %d payload bytes, only read %d: %s", length, n, err)
 	}
 
 	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])
 
-	return SetOp{
+	return &SetOp{
 		Key:     parts[1],
 		Flags:   uint32(flags),
 		Expire:  expire,

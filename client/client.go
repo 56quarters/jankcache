@@ -1,87 +1,75 @@
 package client
 
 import (
-	"fmt"
-	"math"
-
 	"github.com/bradfitz/gomemcache/memcache"
+
+	"github.com/56quarters/jankcache/cache"
+	"github.com/56quarters/jankcache/proto"
 )
 
-// TODO: Should we just use memcached Item?
-
-type Item struct {
-	Key        string
-	Value      []byte
-	Flags      uint32
-	Expiration int64 // TODO: Should we match memcached (int32)?
-}
-
 type Client interface {
-	Set(item *Item) error
-	Get(key string) (*Item, error)
-	GetMulti(keys []string) (map[string]*Item, error)
+	Set(item *memcache.Item) error
+	Get(key string) (*memcache.Item, error)
+	GetMulti(keys []string) (map[string]*memcache.Item, error)
 	Delete(key string) error
 	DeleteAll() error
 }
 
-type RemoteClient struct {
-	client *memcache.Client
-}
-
-func NewRemoteClient(client *memcache.Client) Client {
-	return &RemoteClient{client: client}
-}
-
-func (c *RemoteClient) Set(item *Item) error {
-	if item.Expiration > math.MaxInt32 {
-		return fmt.Errorf("item expiration int32 overflow %d", item.Expiration)
+func NewLocalClient(local *cache.Adapter) Client {
+	return &LocalClient{
+		local: local,
 	}
+}
 
-	return c.client.Set(&memcache.Item{
-		Key:        item.Key,
-		Value:      item.Value,
-		Flags:      item.Flags,
-		Expiration: int32(item.Expiration),
+type LocalClient struct {
+	local *cache.Adapter
+}
+
+func (l *LocalClient) Set(item *memcache.Item) error {
+	return l.local.Set(&proto.SetOp{
+		Key:    item.Key,
+		Flags:  item.Flags,
+		Expire: int64(item.Expiration),
+		Bytes:  item.Value,
 	})
 }
 
-func (c *RemoteClient) Get(key string) (*Item, error) {
-	res, err := c.client.Get(key)
+func (l *LocalClient) Get(key string) (*memcache.Item, error) {
+	res, err := l.GetMulti([]string{key})
 	if err != nil {
 		return nil, err
 	}
 
-	return &Item{
-		Key:        res.Key,
-		Value:      res.Value,
-		Flags:      res.Flags,
-		Expiration: int64(res.Expiration),
-	}, nil
+	if len(res) == 0 {
+		return nil, nil
+	}
+
+	return res[key], nil
 }
 
-func (c *RemoteClient) GetMulti(keys []string) (map[string]*Item, error) {
-	res, err := c.client.GetMulti(keys)
+func (l *LocalClient) GetMulti(keys []string) (map[string]*memcache.Item, error) {
+	res, err := l.local.Get(&proto.GetOp{Keys: keys})
 	if err != nil {
 		return nil, err
 	}
 
-	out := make(map[string]*Item, len(res))
+	out := make(map[string]*memcache.Item, len(res))
 	for k, v := range res {
-		out[k] = &Item{
-			Key:        v.Key,
+		out[k] = &memcache.Item{
+			Key:        k,
 			Value:      v.Value,
 			Flags:      v.Flags,
-			Expiration: int64(v.Expiration),
+			Expiration: int32(v.Expiration.Seconds()),
 		}
 	}
 
 	return out, nil
 }
 
-func (c *RemoteClient) Delete(key string) error {
-	return c.client.Delete(key)
+func (l *LocalClient) Delete(key string) error {
+	return l.local.Delete(&proto.DeleteOp{Key: key})
 }
 
-func (c *RemoteClient) DeleteAll() error {
-	return c.client.DeleteAll()
+func (l *LocalClient) DeleteAll() error {
+	return l.local.Flush(&proto.FlushAllOp{})
 }

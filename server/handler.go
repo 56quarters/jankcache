@@ -74,7 +74,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 
 	switch op.Type() {
 	case proto.OpTypeCacheMemLimit:
-		limitOp := op.(proto.CacheMemLimitOp)
+		limitOp := op.(*proto.CacheMemLimitOp)
 		err := h.adapter.CacheMemLimit(limitOp)
 		if err != nil {
 			h.send(h.encoder.Error(err), bufWrite)
@@ -82,7 +82,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 			h.send(h.encoder.Ok(), bufWrite)
 		}
 	case proto.OpTypeDelete:
-		delOp := op.(proto.DeleteOp)
+		delOp := op.(*proto.DeleteOp)
 		err := h.adapter.Delete(delOp)
 		if err != nil {
 			h.send(h.encoder.Error(err), bufWrite)
@@ -90,7 +90,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 			h.send(h.encoder.Deleted(), bufWrite)
 		}
 	case proto.OpTypeFlushAll:
-		flushOp := op.(proto.FlushAllOp)
+		flushOp := op.(*proto.FlushAllOp)
 		err = h.adapter.Flush(flushOp)
 		if err != nil {
 			h.send(h.encoder.Error(err), bufWrite)
@@ -98,7 +98,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 			h.send(h.encoder.Ok(), bufWrite)
 		}
 	case proto.OpTypeGet:
-		getOp := op.(proto.GetOp)
+		getOp := op.(*proto.GetOp)
 		res, err := h.adapter.Get(getOp)
 		if err != nil {
 			h.send(h.encoder.Error(err), bufWrite)
@@ -119,7 +119,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	case proto.OpTypeQuit:
 		return core.ErrQuit
 	case proto.OpTypeSet:
-		setOp := op.(proto.SetOp)
+		setOp := op.(*proto.SetOp)
 		err := h.adapter.Set(setOp)
 		if err != nil {
 			h.send(h.encoder.Error(err), bufWrite)

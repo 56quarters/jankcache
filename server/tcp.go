@@ -34,8 +34,7 @@ type TCPServer struct {
 	logger   log.Logger
 	listener net.Listener
 	stopping int32
-
-	now func() time.Time
+	time     core.Time
 }
 
 func NewTCPServer(config TCPConfig, handler *Handler, logger log.Logger) *TCPServer {
@@ -43,7 +42,7 @@ func NewTCPServer(config TCPConfig, handler *Handler, logger log.Logger) *TCPSer
 		config:  config,
 		handler: handler,
 		logger:  logger,
-		now:     time.Now,
+		time:    &core.DefaultTime{},
 	}
 }
 
@@ -89,7 +88,7 @@ func (s *TCPServer) handle(conn net.Conn) {
 
 	for {
 		if s.config.IdleTimeout > 0 {
-			err := conn.SetDeadline(s.now().Add(s.config.IdleTimeout))
+			err := conn.SetDeadline(s.time.Now().Add(s.config.IdleTimeout))
 			if err != nil {
 				level.Error(s.logger).Log("msg", "unable to set idle timeout on connection", "remote", conn.RemoteAddr(), "err", err)
 				return
