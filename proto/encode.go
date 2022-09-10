@@ -13,6 +13,12 @@ type Encoder struct {
 	buffers sync.Pool
 }
 
+// TODO: Change the whole API of this to accept a bytes.Buffer for everything?
+//  Need to make sure that the buffer doesn't grow in proportion to the result
+//  set in that case. I.e. it needs to be written to the output stream after every
+//  result and we let the buffer size of the output stream determine when to flush
+//  instead of buffering the entire response in a single byte.Buffer.
+
 func NewEncoder() *Encoder {
 	return &Encoder{
 		buffers: sync.Pool{
@@ -38,6 +44,8 @@ func (e *Encoder) Error(err error) []byte {
 }
 
 func (e *Encoder) Value(key string, flags uint32, value []byte) *bytes.Buffer {
+	// TODO: Why return the buffer here instead of just b.Bytes()? Because we don't
+	//  want the Buffer reused before the bytes are written somewhere?
 	b := e.buffers.Get().(*bytes.Buffer)
 	b.Reset()
 

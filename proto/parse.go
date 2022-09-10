@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -18,9 +19,9 @@ const (
 	OpTypeGet
 	OpTypeQuit
 	OpTypeSet
-	OpTypeStats
 )
 
+const maxKeySizeBytes = 255
 const maxPayloadSizeBytes = 1024 * 1024
 
 type Op interface {
@@ -152,10 +153,15 @@ func (p *Parser) ParseDelete(line string, parts []string) (*DeleteOp, error) {
 		return nil, core.ClientError("bad delete command '%s'", line)
 	}
 
+	key, err := validateKey(parts[1])
+	if err != nil {
+		return nil, core.ClientError("bad key: %s", err)
+	}
+
 	noreply := len(parts) > 2 && "noreply" == strings.ToLower(parts[2])
 
 	return &DeleteOp{
-		Key:     parts[1],
+		Key:     key,
 		NoReply: noreply,
 	}, nil
 }
@@ -198,12 +204,22 @@ func (p *Parser) ParseGet(line string, parts []string, unique bool) (*GetOp, err
 		return nil, core.ClientError("bad get command '%s'", line)
 	}
 
-	return &GetOp{Keys: parts[1:], Unique: unique}, nil
+	keys, err := validateKeys(parts[1:])
+	if err != nil {
+		return nil, core.ClientError("bad key(s): %s", err)
+	}
+
+	return &GetOp{Keys: keys, Unique: unique}, nil
 }
 
 func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
 	if len(parts) < 5 {
 		return nil, core.ClientError("bad set command '%s'", line)
+	}
+
+	key, err := validateKey(parts[1])
+	if err != nil {
+		return nil, core.ClientError("bad key: %s", err)
 	}
 
 	flags, err := strconv.ParseUint(parts[2], 10, 16)
@@ -234,10 +250,30 @@ func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (*SetO
 	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])
 
 	return &SetOp{
-		Key:     parts[1],
+		Key:     key,
 		Flags:   uint32(flags),
 		Expire:  expire,
 		NoReply: noreply,
 		Bytes:   bytes,
 	}, nil
+}
+
+func validateKeys(keys []string) ([]string, error) {
+	for _, k := range keys {
+		_, err := validateKey(k)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return keys, nil
+}
+
+func validateKey(key string) (string, error) {
+	length := len(key)
+	if length > maxKeySizeBytes {
+		return "", fmt.Errorf("length %d greater than max of %d", length, maxKeySizeBytes)
+	}
+
+	return key, nil
 }

@@ -1,17 +1,18 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/services"
 
 	"github.com/56quarters/jankcache/core"
 )
@@ -29,55 +30,77 @@ func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 }
 
 type TCPServer struct {
+	services.Service
+
 	config   TCPConfig
 	handler  *Handler
-	logger   log.Logger
 	listener net.Listener
-	stopping int32
+	stopping chan struct{}
+	logger   log.Logger
 	time     core.Time
 }
 
 func NewTCPServer(config TCPConfig, handler *Handler, logger log.Logger) *TCPServer {
-	return &TCPServer{
-		config:  config,
-		handler: handler,
-		logger:  logger,
-		time:    &core.DefaultTime{},
+	s := &TCPServer{
+		config:   config,
+		handler:  handler,
+		stopping: make(chan struct{}),
+		logger:   logger,
+		time:     &core.DefaultTime{},
 	}
+
+	s.Service = services.NewBasicService(s.start, s.loop, s.stop)
+	return s
 }
 
-func (s *TCPServer) Stop() {
-	atomic.CompareAndSwapInt32(&s.stopping, 0, 1)
-
-	if s.listener != nil {
-		if err := s.listener.Close(); err != nil {
-			level.Warn(s.logger).Log("msg", "error closing listener", "err", err)
-		}
-	}
-}
-
-func (s *TCPServer) Run() error {
-	var err error
-	s.listener, err = net.Listen("tcp", s.config.Address)
+func (s *TCPServer) start(ctx context.Context) error {
+	listener, err := net.Listen("tcp", s.config.Address)
 	if err != nil {
 		return fmt.Errorf("unable to bind to %s: %w", s.config.Address, err)
 	}
 
+	s.listener = listener
+	// Spawn a goroutine to wait for this context to be cancelled (happens when this service
+	// is shutdown) and close the listener so Accept will return an error. Otherwise, the Accept()
+	// call would block indefinitely.
+	go s.shutdown(ctx)
+	return nil
+}
+
+func (s *TCPServer) loop(context.Context) error {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			// If the server is stopping, ignore any error here since it's expected
-			if atomic.LoadInt32(&s.stopping) != 0 {
+			select {
+			case <-s.stopping:
+				// Server is shutting down, ignore the error since this is intentional.
 				return nil
+			default:
+				return fmt.Errorf("unable to accept connection: %w", err)
 			}
-
-			return fmt.Errorf("unable to accept connection: %w", err)
 		}
 
-		// TODO: Connection limit?
-		// TODO: Pool of routines or something? epoll?
 		level.Debug(s.logger).Log("msg", "accepting connection", "remote", conn.RemoteAddr())
 		go s.handle(conn)
+	}
+}
+
+func (s *TCPServer) stop(err error) error {
+	if err != nil {
+		level.Error(s.logger).Log("msg", "stopping TCP server due to error", "err", err)
+	}
+
+	return nil
+}
+
+func (s *TCPServer) shutdown(ctx context.Context) {
+	<-ctx.Done()
+
+	close(s.stopping)
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			level.Warn(s.logger).Log("msg", "error closing listener", "err", err)
+		}
 	}
 }
 

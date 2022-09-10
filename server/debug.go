@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	_ "net/http/pprof"
 
 	"github.com/go-kit/log"
+	"github.com/grafana/dskit/services"
 )
 
 type DebugConfig struct {
@@ -19,26 +21,30 @@ func (c *DebugConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 }
 
 func NewDebugServer(config DebugConfig, logger log.Logger) *DebugServer {
-	return &DebugServer{
+	s := &DebugServer{
 		config: config,
 		logger: logger,
 	}
+
+	s.Service = services.NewBasicService(nil, s.loop, nil)
+	return s
 }
 
 type DebugServer struct {
+	services.Service
+
 	config DebugConfig
 	logger log.Logger
 }
 
-func (s *DebugServer) Stop() {
-	// nothing yet
+func (s *DebugServer) start(ctx context.Context) error {
+	return nil
 }
 
-func (s *DebugServer) Run() error {
-	if !s.config.Enabled {
-		return nil
-	}
-
-	// TODO: Create our own server so we can start/stop it instead of using the default
+func (s *DebugServer) loop(ctx context.Context) error {
 	return http.ListenAndServe(s.config.Address, nil)
+}
+
+func (s *DebugServer) stop(err error) error {
+	return nil
 }

@@ -40,11 +40,6 @@ func NewHandler(parser *proto.Parser, encoder *proto.Encoder, adapter *cache.Ada
 	}
 }
 
-func (h *Handler) send(bytes []byte, writer io.Writer) {
-	// TODO: logging or metrics when writes fail
-	_, _ = writer.Write(bytes)
-}
-
 func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	bufRead := h.readers.Get().(*bufio.Reader)
 	bufWrite := h.writers.Get().(*bufio.Writer)
@@ -57,6 +52,7 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 		h.writers.Put(bufWrite)
 	}()
 
+	// TODO: Should we limit the "line" size here?
 	text := textproto.NewReader(bufRead)
 	line, err := text.ReadLine()
 	if err != nil {
@@ -131,4 +127,9 @@ func (h *Handler) Handle(read io.Reader, write io.Writer) error {
 	}
 
 	return nil
+}
+
+func (h *Handler) send(bytes []byte, writer io.Writer) {
+	// TODO: logging or metrics when writes fail
+	_, _ = writer.Write(bytes)
 }
