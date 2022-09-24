@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -28,7 +30,6 @@ func main() {
 
 	// TODO: Make level configurable
 	logger = log.With(level.NewFilter(logger, level.AllowDebug()), "ts", log.DefaultTimestampUTC)
-	ctx := context.Background()
 
 	app, err := server.ApplicationFromConfig(cfg, logger)
 	if err != nil {
@@ -36,9 +37,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	shutdown(cancel, logger)
+
 	err = app.Run(ctx)
-	if err != nil {
+	if err != nil && !errors.Is(context.Canceled, err) {
 		level.Error(logger).Log("msg", "error running application", "err", err)
 		os.Exit(1)
 	}
+}
+
+func shutdown(cancel context.CancelFunc, logger log.Logger) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigs
+		level.Info(logger).Log("msg", "stopping on signal", "signal", sig)
+		cancel()
+	}()
 }
