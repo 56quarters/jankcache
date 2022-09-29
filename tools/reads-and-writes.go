@@ -17,12 +17,12 @@ import (
 const numBatches = 10
 const batchSize = 10000
 
-func readAndWrite(keys []string, c client.Client, logger log.Logger) {
+func readAndWrite(keys []string, mc client.Client, logger log.Logger) {
 	for {
 		n := rand.Intn(len(keys))
 		subset := keys[0:n]
 		for _, k := range subset {
-			err := c.Set(&client.Item{
+			err := mc.Set(&memcache.Item{
 				Key:        k,
 				Value:      []byte(fmt.Sprintf("some value %f", rand.ExpFloat64())),
 				Expiration: 300,
@@ -36,7 +36,7 @@ func readAndWrite(keys []string, c client.Client, logger log.Logger) {
 		time.Sleep(time.Millisecond * time.Duration(rand.Int63n(1000)))
 
 		// SET a subset of keys but try to GET all of them - workloads will skew read heavy
-		_, err := c.GetMulti(keys)
+		_, err := mc.GetMulti(keys)
 		if err != nil {
 			level.Error(logger).Log("msg", "failed to get keys", "err", err)
 		}
@@ -47,7 +47,7 @@ func main() {
 	logger := log.With(log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr)), "ts", log.DefaultTimestampUTC)
 	mc := memcache.New("localhost:11211")
 	mc.MaxIdleConns = numBatches * 2
-	jc := client.NewRemoteClient(mc)
+	mc.Timeout = 400 * time.Millisecond
 
 	wg := sync.WaitGroup{}
 
@@ -62,9 +62,8 @@ func main() {
 		go func() {
 			wg.Add(1)
 			defer wg.Done()
-			readAndWrite(keys, jc, logger)
+			readAndWrite(keys, mc, logger)
 		}()
-
 	}
 
 	wg.Wait()
