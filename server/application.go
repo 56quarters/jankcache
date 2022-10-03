@@ -18,10 +18,10 @@ type Config struct {
 	Debug  DebugConfig
 }
 
-func (c *Config) RegisterFlags(fs *flag.FlagSet) {
-	c.Cache.RegisterFlags("cache.", fs)
-	c.Server.RegisterFlags("server.", fs)
-	c.Debug.RegisterFlags("debug.", fs)
+func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
+	c.Cache.RegisterFlags(prefix+"cache.", fs)
+	c.Server.RegisterFlags(prefix+"server.", fs)
+	c.Debug.RegisterFlags(prefix+"debug.", fs)
 }
 
 type Application struct {

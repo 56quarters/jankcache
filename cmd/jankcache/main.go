@@ -18,7 +18,7 @@ func main() {
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	fs := flag.NewFlagSet("jankcache", flag.ExitOnError)
 	cfg := server.Config{}
-	cfg.RegisterFlags(fs)
+	cfg.RegisterFlags("", fs)
 
 	err := fs.Parse(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
