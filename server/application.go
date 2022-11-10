@@ -68,7 +68,10 @@ func (a *Application) Run(ctx context.Context) error {
 		return err
 	}
 
-	err = a.manager.AwaitStopped(ctx)
+	// Background context here because AwaitStopped will return immediately if the
+	// context provided is cancelled (we use cancellation of ctx to indicate to the
+	// application that it should stop).
+	err = a.manager.AwaitStopped(context.Background())
 	if err != nil {
 		return err
 	}

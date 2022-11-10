@@ -35,18 +35,16 @@ type TCPServer struct {
 	config   TCPConfig
 	handler  *Handler
 	listener net.Listener
-	stopping chan struct{}
 	logger   log.Logger
 	time     core.Time
 }
 
 func NewTCPServer(config TCPConfig, handler *Handler, logger log.Logger) *TCPServer {
 	s := &TCPServer{
-		config:   config,
-		handler:  handler,
-		stopping: make(chan struct{}),
-		logger:   logger,
-		time:     &core.DefaultTime{},
+		config:  config,
+		handler: handler,
+		logger:  logger,
+		time:    &core.DefaultTime{},
 	}
 
 	s.Service = services.NewBasicService(s.start, s.loop, s.stop)
@@ -54,7 +52,8 @@ func NewTCPServer(config TCPConfig, handler *Handler, logger log.Logger) *TCPSer
 }
 
 func (s *TCPServer) start(ctx context.Context) error {
-	listener, err := net.Listen("tcp", s.config.Address)
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "tcp", s.config.Address)
 	if err != nil {
 		return fmt.Errorf("unable to bind to %s: %w", s.config.Address, err)
 	}
@@ -67,12 +66,18 @@ func (s *TCPServer) start(ctx context.Context) error {
 	return nil
 }
 
-func (s *TCPServer) loop(context.Context) error {
+func (s *TCPServer) loop(ctx context.Context) error {
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		conn, err := s.listener.Accept()
 		if err != nil {
 			select {
-			case <-s.stopping:
+			case <-ctx.Done():
 				// Server is shutting down, ignore the error since this is intentional.
 				return nil
 			default:
@@ -95,8 +100,8 @@ func (s *TCPServer) stop(err error) error {
 
 func (s *TCPServer) shutdown(ctx context.Context) {
 	<-ctx.Done()
+	level.Debug(s.logger).Log("msg", "starting TCP server shutdown process")
 
-	close(s.stopping)
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
 			level.Warn(s.logger).Log("msg", "error closing listener", "err", err)
