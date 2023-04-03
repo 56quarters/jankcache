@@ -41,11 +41,13 @@ func main() {
 	shutdown(cancel, logger)
 
 	err = app.Run(ctx)
-	if err != nil && !errors.Is(context.Canceled, err) {
+	if err != nil {
 		level.Error(logger).Log("msg", "error running application", "err", err)
 		os.Exit(1)
 	}
 }
+
+// TODO: Shutdown delay?
 
 func shutdown(cancel context.CancelFunc, logger log.Logger) {
 	sigs := make(chan os.Signal, 1)

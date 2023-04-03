@@ -2,12 +2,10 @@ package proto
 
 import (
 	"fmt"
+	"github.com/56quarters/jankcache/core"
 	"io"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/56quarters/jankcache/core"
 )
 
 type OpType int
@@ -15,13 +13,14 @@ type OpType int
 const (
 	OpTypeCacheMemLimit = iota
 	OpTypeDelete
-	OpTypeFlushAll
 	OpTypeGet
 	OpTypeQuit
 	OpTypeSet
+	OpTypeVersion
+	OpTypeStats
 )
 
-const maxKeySizeBytes = 255
+const maxKeySizeBytes = 250
 const maxPayloadSizeBytes = 1024 * 1024
 
 type Op interface {
@@ -46,15 +45,6 @@ func (DeleteOp) Type() OpType {
 	return OpTypeDelete
 }
 
-type FlushAllOp struct {
-	Delay   time.Duration
-	NoReply bool
-}
-
-func (FlushAllOp) Type() OpType {
-	return OpTypeFlushAll
-}
-
 type GetOp struct {
 	Keys   []string
 	Unique bool
@@ -68,6 +58,18 @@ type QuitOp struct{}
 
 func (QuitOp) Type() OpType {
 	return OpTypeQuit
+}
+
+type VersionOp struct{}
+
+func (VersionOp) Type() OpType {
+	return OpTypeVersion
+}
+
+type StatsOp struct{}
+
+func (StatsOp) Type() OpType {
+	return OpTypeStats
 }
 
 type SetOp struct {
@@ -105,8 +107,6 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 		return p.ParseCacheMemLimit(line, parts)
 	case "delete":
 		return p.ParseDelete(line, parts)
-	case "flush_all":
-		return p.ParseFlushAll(line, parts)
 	case "get":
 		return p.ParseGet(line, parts, false)
 	case "gets":
@@ -115,8 +115,12 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 		return QuitOp{}, nil
 	case "set":
 		return p.ParseSet(line, parts, payload)
-	case "add", "append", "cas", "decr", "gat", "gats", "incr", "lru", "lru_crawler",
-		"prepend", "replace", "shutdown", "slabs", "stats", "touch", "version", "watch":
+	case "stats":
+		return StatsOp{}, nil
+	case "version":
+		return VersionOp{}, nil
+	case "add", "append", "cas", "decr", "flush_all", "gat", "gats", "incr", "lru",
+		"lru_crawler", "prepend", "replace", "shutdown", "slabs", "touch", "watch":
 		// Valid memcached commands that we've chosen not to implement because they
 		// aren't needed for our usecase or their implementation would impact performance
 		// or complexity of the commands we do support (or both).
@@ -164,39 +168,6 @@ func (p *Parser) ParseDelete(line string, parts []string) (*DeleteOp, error) {
 		Key:     key,
 		NoReply: noreply,
 	}, nil
-}
-
-func (p *Parser) ParseFlushAll(line string, parts []string) (*FlushAllOp, error) {
-	// TODO: This sucks, get rid of the duplicate code
-
-	if len(parts) == 2 {
-		if "noreply" == strings.ToLower(parts[1]) {
-			return &FlushAllOp{NoReply: true}, nil
-		}
-
-		delay, err := strconv.ParseUint(parts[1], 10, 64)
-		if err != nil {
-			return nil, core.ClientError("bad delay: '%s': %s", line, err)
-		}
-
-		return &FlushAllOp{Delay: time.Duration(delay) * time.Second}, nil
-	}
-
-	if len(parts) == 3 {
-		delay, err := strconv.ParseUint(parts[1], 10, 64)
-		if err != nil {
-			return nil, core.ClientError(" bad delay: '%s': %s", line, err)
-		}
-
-		noreply := "noreply" == strings.ToLower(parts[2])
-
-		return &FlushAllOp{
-			Delay:   time.Duration(delay) * time.Second,
-			NoReply: noreply,
-		}, nil
-	}
-
-	return &FlushAllOp{}, nil
 }
 
 func (p *Parser) ParseGet(line string, parts []string, unique bool) (*GetOp, error) {
