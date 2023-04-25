@@ -1,86 +1,92 @@
 package proto
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"sync"
+	"io"
 
 	"github.com/56quarters/jankcache/core"
 )
 
-type Encoder struct {
-	buffers sync.Pool
+var (
+	crlf = []byte("\r\n")
+)
+
+type Output struct {
+	writer io.Writer
+	err    error
 }
 
-// TODO: Change the whole API of this to accept a bytes.Buffer for everything?
-//  Need to make sure that the buffer doesn't grow in proportion to the result
-//  set in that case. I.e. it needs to be written to the output stream after every
-//  result and we let the buffer size of the output stream determine when to flush
-//  instead of buffering the entire response in a single byte.Buffer.
-
-func NewEncoder() *Encoder {
-	return &Encoder{
-		buffers: sync.Pool{
-			New: func() any { return &bytes.Buffer{} },
-		},
+func NewOutput(writer io.Writer) *Output {
+	return &Output{
+		writer: writer,
 	}
 }
 
-func (e *Encoder) Error(err error) []byte {
+func (o *Output) Line(line string) *Output {
+	if o.err == nil {
+		_, o.err = o.writer.Write([]byte(line))
+	}
+
+	if o.err == nil {
+		_, o.err = o.writer.Write(crlf)
+	}
+
+	return o
+}
+
+func (o *Output) Bytes(b []byte) *Output {
+	if o.err == nil {
+		_, o.err = o.writer.Write(b)
+	}
+
+	if o.err == nil {
+		_, o.err = o.writer.Write(crlf)
+	}
+
+	return o
+}
+
+func (o *Output) Error(err error) *Output {
 	if errors.Is(err, core.ErrBadCommand) {
-		return []byte(fmt.Sprintf("%s\r\n", err))
+		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrClient) {
-		return []byte(fmt.Sprintf("%s\r\n", err))
+		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrServer) {
-		return []byte(fmt.Sprintf("%s\r\n", err))
+		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrExists) {
-		return []byte(fmt.Sprintf("%s\r\n", err))
+		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrNotFound) {
-		return []byte(fmt.Sprintf("%s\r\n", err))
-	} else {
-		return []byte(fmt.Sprintf("%s\r\n", core.ServerError(err.Error())))
+		return o.Line(err.Error())
 	}
+
+	return o.Line(core.ServerError(err.Error()).Error())
 }
 
-func (e *Encoder) Value(key string, flags uint32, value []byte) *bytes.Buffer {
-	// TODO: Why return the buffer here instead of just b.Bytes()? Because we don't
-	//  want the Buffer reused before the bytes are written somewhere?
-	b := e.buffers.Get().(*bytes.Buffer)
-	b.Reset()
-
-	b.WriteString(fmt.Sprintf("VALUE %s %d %d\r\n", key, flags, len(value)))
-	b.Write(value)
-	b.WriteString("\r\n")
-	return b
+func (o *Output) Encode(obj MemcachedMarshaller) *Output {
+	obj.MarshallMemcached(o)
+	return o
 }
 
-func (e *Encoder) ValueUnique(key string, flags uint32, value []byte, unique uint64) *bytes.Buffer {
-	b := e.buffers.Get().(*bytes.Buffer)
-	b.Reset()
-
-	b.WriteString(fmt.Sprintf("VALUE %s %d %d %d\r\n", key, flags, len(value), unique))
-	b.Write(value)
-	b.WriteString("\r\n")
-	return b
+func (o *Output) End() *Output {
+	return o.Line("END")
 }
 
-func (e *Encoder) PutBuffer(buf *bytes.Buffer) {
-	e.buffers.Put(buf)
+func (o *Output) Stored() *Output {
+	return o.Line("STORED")
 }
 
-func (e *Encoder) End() []byte {
-	return []byte("END\r\n")
+func (o *Output) Deleted() *Output {
+	return o.Line("DELETED")
 }
 
-func (e *Encoder) Stored() []byte {
-	return []byte("STORED\r\n")
+func (o *Output) Ok() *Output {
+	return o.Line("OK")
 }
 
-func (e *Encoder) Deleted() []byte {
-	return []byte("DELETED\r\n")
+func (o *Output) Err() error {
+	return o.err
 }
 
-func (e *Encoder) Ok() []byte {
-	return []byte("OK\r\n")
+type MemcachedMarshaller interface {
+	MarshallMemcached(o *Output)
 }

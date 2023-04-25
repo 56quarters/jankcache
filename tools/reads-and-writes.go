@@ -10,12 +10,11 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-
-	"github.com/56quarters/jankcache/client"
 )
 
 const numBatches = 10
-const batchSize = 100000
+const batchSize = 1300
+const numWrites = 45
 const payload = `
 {
     "@context": [
@@ -181,10 +180,17 @@ const payload = `
 }
 `
 
-func readAndWrite(keys []string, mc client.Client, logger log.Logger) {
+func readAndWrite(keys []string, mc *memcache.Client, logger log.Logger) {
 	for {
-		n := rand.Intn(len(keys))
-		subset := keys[0:n]
+		start := rand.Intn(len(keys))
+		var end int
+		if len(keys)-start > numWrites {
+			end = start + numWrites
+		} else {
+			end = len(keys)
+		}
+
+		subset := keys[start:end]
 		for _, k := range subset {
 			err := mc.Set(&memcache.Item{
 				Key:        k,
@@ -197,7 +203,7 @@ func readAndWrite(keys []string, mc client.Client, logger log.Logger) {
 			}
 		}
 
-		time.Sleep(time.Millisecond * time.Duration(rand.Int63n(1000)))
+		//time.Sleep(time.Millisecond * time.Duration(rand.Int63n(1000)))
 
 		// SET a subset of keys but try to GET all of them - workloads will skew read heavy
 		_, err := mc.GetMulti(keys)
@@ -209,13 +215,14 @@ func readAndWrite(keys []string, mc client.Client, logger log.Logger) {
 
 func main() {
 	logger := log.With(log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr)), "ts", log.DefaultTimestampUTC)
-	mc := memcache.New("localhost:11211", "localhost:11212")
+	//mc := memcache.New("localhost:11211", "localhost:11212", "localhost:11213")
+	mc := memcache.New("localhost:11211")
 	mc.MaxIdleConns = numBatches * 2
 	mc.Timeout = 400 * time.Millisecond
 
 	wg := sync.WaitGroup{}
 
-	for batch := 0; batch < numBatches; batch += 1 {
+	for batch := 0; batch < numBatches; batch++ {
 		start := batch * batchSize
 		var keys []string
 
@@ -223,8 +230,8 @@ func main() {
 			keys = append(keys, fmt.Sprintf("somekey%d", i+start))
 		}
 
+		wg.Add(1)
 		go func() {
-			wg.Add(1)
 			defer wg.Done()
 			readAndWrite(keys, mc, logger)
 		}()

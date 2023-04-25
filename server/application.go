@@ -42,12 +42,15 @@ func ApplicationFromConfig(cfg Config, logger log.Logger) (*Application, error) 
 		srvs = append(srvs, NewDebugServer(cfg.Debug, logger))
 	}
 
-	encoder := proto.NewEncoder()
+	metrics := NewMetrics()
+	metrics.MaxBytes.Store(cfg.Cache.MaxSizeMb * 1024 * 1024)
+	metrics.MaxConnections.Store(cfg.Server.MaxConnections)
+
 	parser := proto.NewParser()
-	handler := NewHandler(parser, encoder, adapter)
+	handler := NewHandler(parser, adapter, metrics)
 
 	level.Info(logger).Log("msg", "running server", "address", cfg.Server.Address)
-	srvs = append(srvs, NewTCPServer(cfg.Server, handler, logger))
+	srvs = append(srvs, NewTCPServer(cfg.Server, handler, metrics, logger))
 
 	manager, err := services.NewManager(srvs...)
 	if err != nil {
