@@ -13,7 +13,6 @@ var (
 
 type Output struct {
 	writer io.Writer
-	err    error
 }
 
 func NewOutput(writer io.Writer) *Output {
@@ -23,26 +22,14 @@ func NewOutput(writer io.Writer) *Output {
 }
 
 func (o *Output) Line(line string) *Output {
-	if o.err == nil {
-		_, o.err = o.writer.Write([]byte(line))
-	}
-
-	if o.err == nil {
-		_, o.err = o.writer.Write(crlf)
-	}
-
+	_, _ = o.writer.Write([]byte(line))
+	_, _ = o.writer.Write(crlf)
 	return o
 }
 
 func (o *Output) Bytes(b []byte) *Output {
-	if o.err == nil {
-		_, o.err = o.writer.Write(b)
-	}
-
-	if o.err == nil {
-		_, o.err = o.writer.Write(crlf)
-	}
-
+	_, _ = o.writer.Write(b)
+	_, _ = o.writer.Write(crlf)
 	return o
 }
 
@@ -81,10 +68,6 @@ func (o *Output) Deleted() *Output {
 
 func (o *Output) Ok() *Output {
 	return o.Line("OK")
-}
-
-func (o *Output) Err() error {
-	return o.err
 }
 
 type MemcachedMarshaller interface {

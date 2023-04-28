@@ -99,18 +99,20 @@ func (b *bufferedConnection) Close() error {
 	return errs.Err()
 }
 
-func NewHandler(parser *proto.Parser, adapter *cache.Adapter, metrics *Metrics) *Handler {
-	return &Handler{
-		parser:  parser,
-		adapter: adapter,
-		metrics: metrics,
-	}
-}
-
 type Handler struct {
 	parser  *proto.Parser
 	adapter *cache.Adapter
 	metrics *Metrics
+	rtCtx   *RuntimeContext
+}
+
+func NewHandler(parser *proto.Parser, adapter *cache.Adapter, metrics *Metrics, rtCtx *RuntimeContext) *Handler {
+	return &Handler{
+		parser:  parser,
+		adapter: adapter,
+		metrics: metrics,
+		rtCtx:   rtCtx,
+	}
 }
 
 func (h *Handler) Reject(conn io.ReadWriter, msg string, args ...any) {
@@ -192,7 +194,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 			output.Stored()
 		}
 	case proto.OpTypeStats:
-		stats := NewStats(h.adapter, h.metrics)
+		stats := NewStats(h.adapter, h.metrics, h.rtCtx.Read())
 		output.Encode(&stats)
 	case proto.OpTypeVersion:
 		output.Line(version)
