@@ -41,7 +41,6 @@ func ApplicationFromConfig(cfg Config, logger log.Logger) (*Application, error) 
 	}
 
 	metrics := NewMetrics()
-	metrics.MaxBytes.Store(cfg.Cache.MaxSizeMb * 1024 * 1024)
 	metrics.MaxConnections.Store(cfg.Server.MaxConnections)
 
 	rtCtx := NewRuntimeContext()

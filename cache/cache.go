@@ -80,6 +80,10 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	}
 }
 
+func (a *Adapter) MaxBytes() uint64 {
+	return uint64(a.delegate.MaxCost())
+}
+
 func (a *Adapter) Metrics() *ristretto.Metrics {
 	return a.delegate.Metrics
 }
@@ -94,12 +98,16 @@ func (a *Adapter) Delete(op *proto.DeleteOp) error {
 	return nil
 }
 
-func (a *Adapter) Get(op *proto.GetOp) (map[string]*Entry, error) {
-	out := make(map[string]*Entry, len(op.Keys))
+func (a *Adapter) Get(op *proto.GetOp) ([]*Entry, error) {
+	// Slice of entries instead of a map since users can request the same
+	// key multiple times and memcached will return it multiple times. We
+	// don't want to deduplicate and we don't actually use the key anywhere.
+	// We immediately serialize and write all entries to output.
+	out := make([]*Entry, 0, len(op.Keys))
 	for _, k := range op.Keys {
 		e, ok := a.delegate.Get(k)
 		if ok {
-			out[k] = e.(*Entry)
+			out = append(out, e.(*Entry))
 		}
 	}
 
