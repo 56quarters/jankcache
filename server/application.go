@@ -25,8 +25,6 @@ func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 }
 
 type Application struct {
-	// TODO: Create + store client that uses `adapter`
-
 	manager *services.Manager
 }
 

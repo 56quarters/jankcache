@@ -40,8 +40,6 @@ func (o *Output) Error(err error) *Output {
 		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrServer) {
 		return o.Line(err.Error())
-	} else if errors.Is(err, core.ErrExists) {
-		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrNotFound) {
 		return o.Line(err.Error())
 	}
