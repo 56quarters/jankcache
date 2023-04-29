@@ -9,7 +9,6 @@ import (
 	"github.com/dgraph-io/ristretto"
 	"github.com/go-kit/log"
 
-	"github.com/56quarters/jankcache/core"
 	"github.com/56quarters/jankcache/proto"
 )
 
@@ -53,7 +52,6 @@ func (e *NoCasEntry) MarshallMemcached(o *proto.Output) {
 type Adapter struct {
 	delegate *ristretto.Cache
 	cas      atomic.Uint64
-	time     core.Time
 	logger   log.Logger
 }
 
@@ -64,7 +62,7 @@ func New(cfg Config, logger log.Logger) (*Adapter, error) {
 			MaxCost:            int64(cfg.MaxSizeMb * 1024 * 1024),
 			BufferItems:        64,
 			Metrics:            true,
-			IgnoreInternalCost: true,
+			IgnoreInternalCost: false,
 		},
 	)
 
@@ -79,7 +77,6 @@ func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
 	return &Adapter{
 		delegate: cache,
 		logger:   logger,
-		time:     core.DefaultTime{},
 	}
 }
 
@@ -130,7 +127,7 @@ func (a *Adapter) ttl(expire int64) time.Duration {
 	// TODO: Test this because it's dumb
 	var ttl int64
 	if expire > secondsInThirtyDays {
-		now := a.time.Now().Unix()
+		now := time.Now().Unix()
 		ttl = expire - now
 	} else {
 		ttl = expire

@@ -40,7 +40,6 @@ type TCPServer struct {
 	metrics  *Metrics
 	listener net.Listener
 	logger   log.Logger
-	time     core.Time
 }
 
 func NewTCPServer(config TCPConfig, handler *Handler, metrics *Metrics, logger log.Logger) *TCPServer {
@@ -49,7 +48,6 @@ func NewTCPServer(config TCPConfig, handler *Handler, metrics *Metrics, logger l
 		handler: handler,
 		metrics: metrics,
 		logger:  logger,
-		time:    &core.DefaultTime{},
 	}
 
 	s.Service = services.NewBasicService(s.start, s.loop, s.stop)
@@ -133,7 +131,7 @@ func (s *TCPServer) handle(conn net.Conn) {
 
 	for {
 		if s.config.IdleTimeout > 0 {
-			err := conn.SetDeadline(s.time.Now().Add(s.config.IdleTimeout))
+			err := conn.SetDeadline(time.Now().Add(s.config.IdleTimeout))
 			if err != nil {
 				level.Error(s.logger).Log("msg", "unable to set idle timeout on connection", "remote", conn.RemoteAddr(), "err", err)
 				return

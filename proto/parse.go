@@ -2,10 +2,11 @@ package proto
 
 import (
 	"fmt"
-	"github.com/56quarters/jankcache/core"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/56quarters/jankcache/core"
 )
 
 type OpType int

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/go-kit/log/level"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // profiling
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/services"
 )
 

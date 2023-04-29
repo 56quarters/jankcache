@@ -33,7 +33,7 @@ lint:
 	golangci-lint run
 
 setup:
-	GO111MODULE=on go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.33.0
+	GO111MODULE=on go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
 
 test:
 	go test -tags netgo -timeout 5m -race -count 1 ./...

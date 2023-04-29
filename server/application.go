@@ -46,8 +46,11 @@ func ApplicationFromConfig(cfg Config, logger log.Logger) (*Application, error) 
 	metrics.MaxBytes.Store(cfg.Cache.MaxSizeMb * 1024 * 1024)
 	metrics.MaxConnections.Store(cfg.Server.MaxConnections)
 
+	rtCtx := NewRuntimeContext()
+	srvs = append(srvs, rtCtx)
+
 	parser := proto.NewParser()
-	handler := NewHandler(parser, adapter, metrics)
+	handler := NewHandler(parser, adapter, metrics, rtCtx)
 
 	level.Info(logger).Log("msg", "running server", "address", cfg.Server.Address)
 	srvs = append(srvs, NewTCPServer(cfg.Server, handler, metrics, logger))

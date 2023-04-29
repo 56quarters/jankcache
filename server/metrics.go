@@ -1,21 +1,95 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/grafana/dskit/services"
 
 	"github.com/56quarters/jankcache/cache"
 	"github.com/56quarters/jankcache/proto"
 )
 
-var (
-	startup = time.Now()
+type RuntimeSnapshot struct {
+	Uptime    uint64
+	Time      int64
+	Pid       int
+	UserCPU   float64
+	SystemCPU float64
+}
 
-	pid = os.Getpid() // TODO: gross
-)
+type RuntimeContext struct {
+	services.Service
+
+	startup   time.Time
+	now       time.Time
+	pid       int
+	userCPU   float64
+	systemCPU float64
+	mtx       sync.RWMutex
+}
+
+func NewRuntimeContext() *RuntimeContext {
+	r := &RuntimeContext{
+		startup: time.Now(),
+		now:     time.Now(),
+		pid:     os.Getpid(),
+		mtx:     sync.RWMutex{},
+	}
+
+	r.Service = services.NewBasicService(nil, r.loop, nil)
+	return r
+}
+
+func (r *RuntimeContext) loop(ctx context.Context) error {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case t := <-ticker.C:
+			userCPU, systemCPU, err := getUserSystemCPU()
+			if err != nil {
+				return err
+			}
+
+			r.mtx.Lock()
+			r.now = t
+			r.userCPU = userCPU
+			r.systemCPU = systemCPU
+			r.mtx.Unlock()
+		}
+	}
+}
+
+func (r *RuntimeContext) Read() RuntimeSnapshot {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+
+	return RuntimeSnapshot{
+		Uptime:    uint64(r.now.Sub(r.startup).Seconds()),
+		Time:      r.now.Unix(),
+		Pid:       r.pid,
+		UserCPU:   r.userCPU,
+		SystemCPU: r.systemCPU,
+	}
+}
+
+func getUserSystemCPU() (float64, float64, error) {
+	payload := syscall.Rusage{}
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &payload); err != nil {
+		return 0, 0, err
+	}
+
+	return timevalToFloat(payload.Utime), timevalToFloat(payload.Stime), nil
+}
 
 func timevalToFloat(v syscall.Timeval) float64 {
 	return float64(v.Sec) + float64(v.Usec)/1_000_000.0
@@ -35,23 +109,17 @@ type Metrics struct {
 	MaxBytes            atomic.Uint64
 }
 
-func NewStats(c *cache.Adapter, m *Metrics) Stats {
+func NewStats(c *cache.Adapter, m *Metrics, r RuntimeSnapshot) Stats {
 	cacheMetrics := c.Metrics()
 
-	// TODO: Some sort of ticker that updates uptime and server time once a second?
-
-	// TODO: check error. do this in ticker?
-	payload := syscall.Rusage{}
-	syscall.Getrusage(syscall.RUSAGE_SELF, &payload)
-
 	return Stats{
-		Pid:        pid,
-		Uptime:     uint64(time.Since(startup).Seconds()),
-		ServerTime: time.Now().Unix(),
+		Pid:        r.Pid,
+		Uptime:     r.Uptime,
+		ServerTime: r.Time,
 		Version:    version,
 
-		UserCPU:   timevalToFloat(payload.Utime),
-		SystemCPU: timevalToFloat(payload.Stime),
+		UserCPU:   r.UserCPU,
+		SystemCPU: r.SystemCPU,
 
 		MaxConnections:      m.MaxConnections.Load(),
 		CurrentConnections:  uint64(m.CurrentConnections.Load()),
