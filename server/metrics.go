@@ -106,7 +106,6 @@ type Metrics struct {
 	RejectedConnections atomic.Uint64
 	BytesWritten        atomic.Uint64
 	BytesRead           atomic.Uint64
-	MaxBytes            atomic.Uint64
 }
 
 func NewStats(c *cache.Adapter, m *Metrics, r RuntimeSnapshot) Stats {
@@ -155,7 +154,7 @@ func NewStats(c *cache.Adapter, m *Metrics, r RuntimeSnapshot) Stats {
 		BytesRead:    m.BytesRead.Load(),
 		BytesWritten: m.BytesWritten.Load(),
 		Bytes:        cacheMetrics.CostAdded() - cacheMetrics.CostEvicted(),
-		MaxBytes:     m.MaxBytes.Load(),
+		MaxBytes:     c.MaxBytes(),
 
 		CurrentItems: cacheMetrics.KeysAdded() - cacheMetrics.KeysEvicted(),
 		TotalItems:   cacheMetrics.KeysAdded(),
