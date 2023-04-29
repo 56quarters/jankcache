@@ -13,7 +13,7 @@ import (
 )
 
 const numBatches = 10
-const batchSize = 1300
+const batchSize = 1000
 const numWrites = 45
 const payload = `
 {

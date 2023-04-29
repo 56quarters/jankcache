@@ -18,8 +18,6 @@ import (
 	"github.com/56quarters/jankcache/core"
 )
 
-// TODO: Metrics for all this stuff
-
 type TCPConfig struct {
 	Address        string
 	IdleTimeout    time.Duration
@@ -28,7 +26,7 @@ type TCPConfig struct {
 
 func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.StringVar(&c.Address, prefix+"address", "localhost:11211", "Address and port for the cache server to bind to")
-	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 60*time.Second, "Max time a connection can be idle before being closed. Set to 0 to disable")
+	fs.DurationVar(&c.IdleTimeout, prefix+"idle-timeout", 0, "Max time a connection can be idle before being closed. Set to 0 to disable")
 	fs.Uint64Var(&c.MaxConnections, prefix+"max-connections", 1024, "Max number of client connections that can be open at once. Set to 0 to disable limit")
 }
 
