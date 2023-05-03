@@ -11,8 +11,8 @@ import (
 
 	"github.com/grafana/dskit/services"
 
-	"github.com/56quarters/jankcache/cache"
-	"github.com/56quarters/jankcache/proto"
+	"github.com/56quarters/jankcache/server/cache"
+	"github.com/56quarters/jankcache/server/proto"
 )
 
 type RuntimeSnapshot struct {
@@ -108,7 +108,7 @@ type Metrics struct {
 	BytesRead           atomic.Uint64
 }
 
-func NewStats(c *cache.Adapter, m *Metrics, r RuntimeSnapshot) Stats {
+func NewStats(c *cache.Cache, m *Metrics, r RuntimeSnapshot) Stats {
 	cacheMetrics := c.Metrics()
 
 	return Stats{
@@ -212,7 +212,7 @@ type Stats struct {
 	Evictions    uint64
 }
 
-func (s *Stats) MarshallMemcached(o *proto.Output) {
+func (s *Stats) MarshallMemcached(o *proto.Encoder) {
 	o.Line(fmt.Sprintf("STAT %s %d", "pid", s.Pid))
 	o.Line(fmt.Sprintf("STAT %s %d", "uptime", s.Uptime))
 	o.Line(fmt.Sprintf("STAT %s %d", "time", s.ServerTime))

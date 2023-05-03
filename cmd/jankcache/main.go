@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/services"
 
 	"github.com/56quarters/jankcache/server"
 )
@@ -31,7 +32,7 @@ func main() {
 	// TODO: Make level configurable
 	logger = log.With(level.NewFilter(logger, level.AllowDebug()), "ts", log.DefaultTimestampUTC)
 
-	app, err := server.ApplicationFromConfig(cfg, logger)
+	srv, err := server.New(cfg, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "unable to create application", "err", err)
 		os.Exit(1)
@@ -40,9 +41,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	shutdown(cancel, logger)
 
-	err = app.Run(ctx)
+	err = services.StartAndAwaitRunning(ctx, srv)
 	if err != nil {
 		level.Error(logger).Log("msg", "error running application", "err", err)
+		os.Exit(1)
+	}
+
+	// Block until the context is cancelled, then shutdown the server
+	<-ctx.Done()
+
+	err = services.StopAndAwaitTerminated(context.Background(), srv)
+	if err != nil {
+		level.Error(logger).Log("msg", "error stopping application", "err", err)
 		os.Exit(1)
 	}
 }

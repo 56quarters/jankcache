@@ -9,7 +9,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 	"github.com/go-kit/log"
 
-	"github.com/56quarters/jankcache/proto"
+	"github.com/56quarters/jankcache/server/proto"
 )
 
 const secondsInThirtyDays = 60 * 60 * 24 * 30
@@ -35,7 +35,7 @@ func (e *Entry) Cost() int64 {
 	return 12 + int64(len(e.Key)) + int64(len(e.Value))
 }
 
-func (e *Entry) MarshallMemcached(o *proto.Output) {
+func (e *Entry) MarshallMemcached(o *proto.Encoder) {
 	o.Line(fmt.Sprintf("VALUE %s %d %d %d", e.Key, e.Flags, len(e.Value), e.Unique))
 	o.Bytes(e.Value)
 }
@@ -44,18 +44,18 @@ type NoCasEntry struct {
 	*Entry
 }
 
-func (e *NoCasEntry) MarshallMemcached(o *proto.Output) {
+func (e *NoCasEntry) MarshallMemcached(o *proto.Encoder) {
 	o.Line(fmt.Sprintf("VALUE %s %d %d", e.Key, e.Flags, len(e.Value)))
 	o.Bytes(e.Value)
 }
 
-type Adapter struct {
+type Cache struct {
 	delegate *ristretto.Cache
 	cas      atomic.Uint64
 	logger   log.Logger
 }
 
-func New(cfg Config, logger log.Logger) (*Adapter, error) {
+func New(cfg Config, logger log.Logger) *Cache {
 	rcache, err := ristretto.NewCache(
 		&ristretto.Config{
 			NumCounters:        maxNumCounters,
@@ -67,45 +67,46 @@ func New(cfg Config, logger log.Logger) (*Adapter, error) {
 	)
 
 	if err != nil {
-		return nil, err
+		// This can only happen if we pass bad config values to ristretto
+		panic(fmt.Sprintf("unexpected error initializing cache: %s", err))
 	}
 
-	return NewFromBacking(rcache, logger), nil
+	return NewFromBacking(rcache, logger)
 }
 
-func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Adapter {
-	return &Adapter{
+func NewFromBacking(cache *ristretto.Cache, logger log.Logger) *Cache {
+	return &Cache{
 		delegate: cache,
 		logger:   logger,
 	}
 }
 
-func (a *Adapter) MaxBytes() uint64 {
-	return uint64(a.delegate.MaxCost())
+func (c *Cache) MaxBytes() uint64 {
+	return uint64(c.delegate.MaxCost())
 }
 
-func (a *Adapter) Metrics() *ristretto.Metrics {
-	return a.delegate.Metrics
+func (c *Cache) Metrics() *ristretto.Metrics {
+	return c.delegate.Metrics
 }
 
-func (a *Adapter) CacheMemLimit(op *proto.CacheMemLimitOp) error {
-	a.delegate.UpdateMaxCost(op.Bytes)
+func (c *Cache) CacheMemLimit(op *proto.CacheMemLimitOp) error {
+	c.delegate.UpdateMaxCost(op.Bytes)
 	return nil
 }
 
-func (a *Adapter) Delete(op *proto.DeleteOp) error {
-	a.delegate.Del(op.Key)
+func (c *Cache) Delete(op *proto.DeleteOp) error {
+	c.delegate.Del(op.Key)
 	return nil
 }
 
-func (a *Adapter) Get(op *proto.GetOp) ([]*Entry, error) {
+func (c *Cache) Get(op *proto.GetOp) ([]*Entry, error) {
 	// Slice of entries instead of a map since users can request the same
 	// key multiple times and memcached will return it multiple times. We
 	// don't want to deduplicate and we don't actually use the key anywhere.
 	// We immediately serialize and write all entries to output.
 	out := make([]*Entry, 0, len(op.Keys))
 	for _, k := range op.Keys {
-		e, ok := a.delegate.Get(k)
+		e, ok := c.delegate.Get(k)
 		if ok {
 			out = append(out, e.(*Entry))
 		}
@@ -114,24 +115,24 @@ func (a *Adapter) Get(op *proto.GetOp) ([]*Entry, error) {
 	return out, nil
 }
 
-func (a *Adapter) Set(op *proto.SetOp) error {
-	ttl := a.ttl(op.Expire)
+func (c *Cache) Set(op *proto.SetOp) error {
+	ttl := c.ttl(op.Expire)
 	entry := &Entry{
 		Key:    op.Key,
-		Unique: a.unique(),
+		Unique: c.unique(),
 		Flags:  op.Flags,
 		Value:  op.Bytes,
 	}
 
-	a.delegate.SetWithTTL(entry.Key, entry, entry.Cost(), ttl)
+	c.delegate.SetWithTTL(entry.Key, entry, entry.Cost(), ttl)
 	return nil
 }
 
-func (a *Adapter) unique() uint64 {
-	return a.cas.Add(1)
+func (c *Cache) unique() uint64 {
+	return c.cas.Add(1)
 }
 
-func (a *Adapter) ttl(expire int64) time.Duration {
+func (c *Cache) ttl(expire int64) time.Duration {
 	// TODO: Test this because it's dumb
 	var ttl int64
 	if expire > secondsInThirtyDays {

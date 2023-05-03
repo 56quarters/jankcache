@@ -15,7 +15,7 @@ import (
 	"github.com/grafana/dskit/runutil"
 	"github.com/grafana/dskit/services"
 
-	"github.com/56quarters/jankcache/core"
+	"github.com/56quarters/jankcache/server/core"
 )
 
 type TCPConfig struct {
@@ -53,6 +53,8 @@ func NewTCPServer(config TCPConfig, handler *Handler, metrics *Metrics, logger l
 }
 
 func (s *TCPServer) start(ctx context.Context) error {
+	level.Info(s.logger).Log("msg", "starting TCP server", "address", s.config.Address)
+
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp", s.config.Address)
 	if err != nil {
