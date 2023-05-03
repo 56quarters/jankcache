@@ -43,6 +43,8 @@ func NewDebugServer(config DebugConfig, logger log.Logger) *DebugServer {
 }
 
 func (s *DebugServer) start(ctx context.Context) error {
+	level.Info(s.logger).Log("msg", "starting debug server", "address", s.config.Address)
+
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "tcp", s.config.Address)
 	if err != nil {

@@ -4,36 +4,36 @@ import (
 	"errors"
 	"io"
 
-	"github.com/56quarters/jankcache/core"
+	"github.com/56quarters/jankcache/server/core"
 )
 
 var (
 	crlf = []byte("\r\n")
 )
 
-type Output struct {
+type Encoder struct {
 	writer io.Writer
 }
 
-func NewOutput(writer io.Writer) *Output {
-	return &Output{
+func NewEncoder(writer io.Writer) *Encoder {
+	return &Encoder{
 		writer: writer,
 	}
 }
 
-func (o *Output) Line(line string) *Output {
+func (o *Encoder) Line(line string) *Encoder {
 	_, _ = o.writer.Write([]byte(line))
 	_, _ = o.writer.Write(crlf)
 	return o
 }
 
-func (o *Output) Bytes(b []byte) *Output {
+func (o *Encoder) Bytes(b []byte) *Encoder {
 	_, _ = o.writer.Write(b)
 	_, _ = o.writer.Write(crlf)
 	return o
 }
 
-func (o *Output) Error(err error) *Output {
+func (o *Encoder) Error(err error) *Encoder {
 	if errors.Is(err, core.ErrBadCommand) {
 		return o.Line(err.Error())
 	} else if errors.Is(err, core.ErrClient) {
@@ -47,27 +47,27 @@ func (o *Output) Error(err error) *Output {
 	return o.Line(core.ServerError(err.Error()).Error())
 }
 
-func (o *Output) Encode(obj MemcachedMarshaller) *Output {
+func (o *Encoder) Encode(obj MemcachedMarshaller) *Encoder {
 	obj.MarshallMemcached(o)
 	return o
 }
 
-func (o *Output) End() *Output {
+func (o *Encoder) End() *Encoder {
 	return o.Line("END")
 }
 
-func (o *Output) Stored() *Output {
+func (o *Encoder) Stored() *Encoder {
 	return o.Line("STORED")
 }
 
-func (o *Output) Deleted() *Output {
+func (o *Encoder) Deleted() *Encoder {
 	return o.Line("DELETED")
 }
 
-func (o *Output) Ok() *Output {
+func (o *Encoder) Ok() *Encoder {
 	return o.Line("OK")
 }
 
 type MemcachedMarshaller interface {
-	MarshallMemcached(o *Output)
+	MarshallMemcached(o *Encoder)
 }

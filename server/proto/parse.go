@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/56quarters/jankcache/core"
+	"github.com/56quarters/jankcache/server/core"
 )
 
 type OpType int
@@ -85,14 +85,7 @@ func (SetOp) Type() OpType {
 	return OpTypeSet
 }
 
-type Parser struct {
-}
-
-func NewParser() *Parser {
-	return &Parser{}
-}
-
-func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
+func ParseLine(line string, payload io.Reader) (Op, error) {
 	if line == "" {
 		return nil, core.ErrBadCommand
 	}
@@ -105,17 +98,17 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 	cmd := strings.ToLower(parts[0])
 	switch cmd {
 	case "cache_memlimit":
-		return p.ParseCacheMemLimit(line, parts)
+		return parseCacheMemLimit(line, parts)
 	case "delete":
-		return p.ParseDelete(line, parts)
+		return parseDelete(line, parts)
 	case "get":
-		return p.ParseGet(line, parts, false)
+		return parseGet(line, parts, false)
 	case "gets":
-		return p.ParseGet(line, parts, true)
+		return parseGet(line, parts, true)
 	case "quit":
 		return QuitOp{}, nil
 	case "set":
-		return p.ParseSet(line, parts, payload)
+		return parseSet(line, parts, payload)
 	case "stats":
 		return StatsOp{}, nil
 	case "version":
@@ -131,7 +124,7 @@ func (p *Parser) Parse(line string, payload io.Reader) (Op, error) {
 	return nil, core.ErrBadCommand
 }
 
-func (p *Parser) ParseCacheMemLimit(line string, parts []string) (*CacheMemLimitOp, error) {
+func parseCacheMemLimit(line string, parts []string) (*CacheMemLimitOp, error) {
 	if len(parts) < 2 {
 		return nil, core.ClientError("bad cache_memlimit command '%s'", line)
 	}
@@ -153,7 +146,7 @@ func (p *Parser) ParseCacheMemLimit(line string, parts []string) (*CacheMemLimit
 	}, nil
 }
 
-func (p *Parser) ParseDelete(line string, parts []string) (*DeleteOp, error) {
+func parseDelete(line string, parts []string) (*DeleteOp, error) {
 	if len(parts) < 2 {
 		return nil, core.ClientError("bad delete command '%s'", line)
 	}
@@ -171,7 +164,7 @@ func (p *Parser) ParseDelete(line string, parts []string) (*DeleteOp, error) {
 	}, nil
 }
 
-func (p *Parser) ParseGet(line string, parts []string, unique bool) (*GetOp, error) {
+func parseGet(line string, parts []string, unique bool) (*GetOp, error) {
 	if len(parts) < 2 {
 		return nil, core.ClientError("bad get command '%s'", line)
 	}
@@ -184,7 +177,7 @@ func (p *Parser) ParseGet(line string, parts []string, unique bool) (*GetOp, err
 	return &GetOp{Keys: keys, Unique: unique}, nil
 }
 
-func (p *Parser) ParseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
+func parseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
 	if len(parts) < 5 {
 		return nil, core.ClientError("bad set command '%s'", line)
 	}

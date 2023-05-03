@@ -9,9 +9,9 @@ import (
 
 	"github.com/grafana/dskit/multierror"
 
-	"github.com/56quarters/jankcache/cache"
-	"github.com/56quarters/jankcache/core"
-	"github.com/56quarters/jankcache/proto"
+	"github.com/56quarters/jankcache/server/cache"
+	"github.com/56quarters/jankcache/server/core"
+	"github.com/56quarters/jankcache/server/proto"
 )
 
 const (
@@ -100,16 +100,14 @@ func (b *bufferedConnection) Close() error {
 }
 
 type Handler struct {
-	parser  *proto.Parser
-	adapter *cache.Adapter
+	cache   *cache.Cache
 	metrics *Metrics
 	rtCtx   *RuntimeContext
 }
 
-func NewHandler(parser *proto.Parser, adapter *cache.Adapter, metrics *Metrics, rtCtx *RuntimeContext) *Handler {
+func NewHandler(cache *cache.Cache, metrics *Metrics, rtCtx *RuntimeContext) *Handler {
 	return &Handler{
-		parser:  parser,
-		adapter: adapter,
+		cache:   cache,
 		metrics: metrics,
 		rtCtx:   rtCtx,
 	}
@@ -121,7 +119,7 @@ func (h *Handler) Reject(conn io.ReadWriter, msg string, args ...any) {
 		_ = wrapped.Close()
 	}()
 
-	output := proto.NewOutput(wrapped)
+	output := proto.NewEncoder(wrapped)
 	output.Error(core.ServerError(msg, args...))
 }
 
@@ -131,7 +129,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 		_ = wrapped.Close()
 	}()
 
-	output := proto.NewOutput(wrapped)
+	output := proto.NewEncoder(wrapped)
 
 	text := textproto.NewReader(wrapped.Reader)
 	line, err := text.ReadLine()
@@ -142,7 +140,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 	// Pass the line we read to the parser as well as the buffered reader since
 	// we'll need to read a payload of bytes (not line delimited) in the case of
 	// a "set" command.
-	op, err := h.parser.Parse(line, wrapped.Reader)
+	op, err := proto.ParseLine(line, wrapped.Reader)
 	if err != nil {
 		output.Error(err)
 		return nil
@@ -151,7 +149,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 	switch op.Type() {
 	case proto.OpTypeCacheMemLimit:
 		limitOp := op.(*proto.CacheMemLimitOp)
-		err := h.adapter.CacheMemLimit(limitOp)
+		err := h.cache.CacheMemLimit(limitOp)
 		if err != nil {
 			output.Error(err)
 		} else if !limitOp.NoReply {
@@ -159,7 +157,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 		}
 	case proto.OpTypeDelete:
 		delOp := op.(*proto.DeleteOp)
-		err := h.adapter.Delete(delOp)
+		err := h.cache.Delete(delOp)
 		if err != nil {
 			output.Error(err)
 		} else if !delOp.NoReply {
@@ -167,7 +165,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 		}
 	case proto.OpTypeGet:
 		getOp := op.(*proto.GetOp)
-		res, err := h.adapter.Get(getOp)
+		res, err := h.cache.Get(getOp)
 		if err != nil {
 			output.Error(err)
 		} else {
@@ -187,14 +185,14 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 		return core.ErrQuit
 	case proto.OpTypeSet:
 		setOp := op.(*proto.SetOp)
-		err := h.adapter.Set(setOp)
+		err := h.cache.Set(setOp)
 		if err != nil {
 			output.Error(err)
 		} else if !setOp.NoReply {
 			output.Stored()
 		}
 	case proto.OpTypeStats:
-		stats := NewStats(h.adapter, h.metrics, h.rtCtx.Read())
+		stats := NewStats(h.cache, h.metrics, h.rtCtx.Read())
 		output.Encode(&stats)
 	case proto.OpTypeVersion:
 		output.Line(version)
