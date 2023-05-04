@@ -23,6 +23,18 @@ func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	c.Debug.RegisterFlags(prefix+"debug.", fs)
 }
 
+func (c *Config) Validate() error {
+	if err := c.Cache.Validate(); err != nil {
+		return err
+	}
+
+	if err := c.Server.Validate(); err != nil {
+		return err
+	}
+
+	return c.Debug.Validate()
+}
+
 type Server struct {
 	services.Service
 
@@ -32,6 +44,10 @@ type Server struct {
 }
 
 func New(cfg Config, logger log.Logger) (*Server, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration: %w", err)
+	}
+
 	metrics := NewMetrics()
 	metrics.MaxConnections.Store(cfg.Server.MaxConnections)
 

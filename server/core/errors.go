@@ -10,8 +10,7 @@ var (
 	ErrClient     = errors.New("CLIENT_ERROR")
 	ErrNotFound   = errors.New("NOT_FOUND")
 	ErrServer     = errors.New("SERVER_ERROR")
-
-	ErrQuit = errors.New("quit")
+	ErrQuit       = errors.New("quit")
 )
 
 func ClientError(msg string, args ...any) error {

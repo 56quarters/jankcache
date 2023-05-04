@@ -1,6 +1,6 @@
 # Jankcache
 
-![build status](https://github.com/56quarters/jackcache/actions/workflows/go.yml/badge.svg)
+![build status](https://github.com/56quarters/jankcache/actions/workflows/go.yml/badge.svg)
 
 Janky Memcached API layer for [ristretto in-memory cache](https://github.com/dgraph-io/ristretto) of questionable wisdom.
 

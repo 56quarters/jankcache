@@ -23,6 +23,14 @@ func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.Uint64Var(&c.MaxSizeMb, prefix+"max-size-mb", 64, "Max cache size in megabytes")
 }
 
+func (c *Config) Validate() error {
+	if c.MaxSizeMb < 1 {
+		return fmt.Errorf("invalid value for max-size-mb: %d", c.MaxSizeMb)
+	}
+
+	return nil
+}
+
 type Entry struct {
 	Key    string
 	Unique uint64
