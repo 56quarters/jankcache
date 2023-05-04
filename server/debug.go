@@ -24,6 +24,10 @@ func (c *DebugConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.StringVar(&c.Address, prefix+"address", "localhost:8080", "Address and port for the debug HTTP server to bind to")
 }
 
+func (c *DebugConfig) Validate() error {
+	return nil
+}
+
 type DebugServer struct {
 	services.Service
 

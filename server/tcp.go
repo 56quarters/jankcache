@@ -30,6 +30,10 @@ func (c *TCPConfig) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.Uint64Var(&c.MaxConnections, prefix+"max-connections", 1024, "Max number of client connections that can be open at once. Set to 0 to disable limit")
 }
 
+func (c *TCPConfig) Validate() error {
+	return nil
+}
+
 type TCPServer struct {
 	services.Service
 
