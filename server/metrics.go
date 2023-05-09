@@ -15,6 +15,7 @@ import (
 	"github.com/56quarters/jankcache/server/proto"
 )
 
+// RuntimeSnapshot is a snapshot of the state maintained by RuntimeContext
 type RuntimeSnapshot struct {
 	Uptime    uint64
 	Time      int64
@@ -23,6 +24,7 @@ type RuntimeSnapshot struct {
 	SystemCPU float64
 }
 
+// RuntimeContext periodically updates runtime specific information used for building Stats.
 type RuntimeContext struct {
 	services.Service
 
@@ -53,7 +55,7 @@ func (r *RuntimeContext) loop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil
 		case t := <-ticker.C:
 			userCPU, systemCPU, err := getUserSystemCPU()
 			if err != nil {
@@ -95,10 +97,7 @@ func timevalToFloat(v syscall.Timeval) float64 {
 	return float64(v.Sec) + float64(v.Usec)/1_000_000.0
 }
 
-func NewMetrics() *Metrics {
-	return &Metrics{}
-}
-
+// Metrics is a bundle of server-centric metrics updated by TCPServer and Handler.
 type Metrics struct {
 	CurrentConnections  atomic.Int64
 	MaxConnections      atomic.Uint64
@@ -108,6 +107,11 @@ type Metrics struct {
 	BytesRead           atomic.Uint64
 }
 
+func NewMetrics() *Metrics {
+	return &Metrics{}
+}
+
+// NewStats creates a new Stats object for use as a response to a Memcached `stats` command.
 func NewStats(c *cache.Cache, m *Metrics, r RuntimeSnapshot) Stats {
 	cacheMetrics := c.Metrics()
 
@@ -162,6 +166,7 @@ func NewStats(c *cache.Cache, m *Metrics, r RuntimeSnapshot) Stats {
 	}
 }
 
+// Stats is the collection of statistics emitted as part of a Memcached `stats` command.
 type Stats struct {
 	Pid        int
 	Uptime     uint64
