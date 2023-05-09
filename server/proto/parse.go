@@ -206,12 +206,13 @@ func parseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
 		return nil, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
 	}
 
-	bytes := make([]byte, length)
+	bytes := make([]byte, length+2) // payload and trailing \r\n
 	n, err := io.ReadFull(payload, bytes)
 	if err != nil {
-		return nil, core.ClientError("unable to read %d payload bytes, only read %d: %s", length, n, err)
+		return nil, core.ClientError("unable to read %d+2 payload bytes, only read %d: %s", length, n, err)
 	}
 
+	bytes = bytes[:length] // truncate trailing \r\n
 	noreply := len(parts) > 5 && "noreply" == strings.ToLower(parts[5])
 
 	return &SetOp{
