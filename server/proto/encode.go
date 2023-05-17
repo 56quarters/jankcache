@@ -2,6 +2,7 @@ package proto
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/56quarters/jankcache/server/core"
@@ -50,6 +51,10 @@ func (o *Encoder) Error(err error) *Encoder {
 func (o *Encoder) Encode(obj MemcachedMarshaller) *Encoder {
 	obj.MarshallMemcached(o)
 	return o
+}
+
+func (o *Encoder) Version(version string) *Encoder {
+	return o.Line(fmt.Sprintf("VERSION %s", version))
 }
 
 func (o *Encoder) End() *Encoder {
