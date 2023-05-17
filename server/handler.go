@@ -195,7 +195,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 		stats := NewStats(h.cache, h.metrics, h.rtCtx.Read())
 		output.Encode(&stats)
 	case proto.OpTypeVersion:
-		output.Line(version)
+		output.Version(version)
 	default:
 		panic(fmt.Sprintf("unexpected operation type: %+v", op))
 	}
