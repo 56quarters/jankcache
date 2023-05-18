@@ -19,10 +19,9 @@ const (
 	OpTypeSet
 	OpTypeVersion
 	OpTypeStats
-)
 
-const maxKeySizeBytes = 250
-const maxPayloadSizeBytes = 1024 * 1024
+	maxKeySizeBytes = 250
+)
 
 type Op interface {
 	Type() OpType
@@ -85,7 +84,17 @@ func (SetOp) Type() OpType {
 	return OpTypeSet
 }
 
-func ParseLine(line string, payload io.Reader) (Op, error) {
+type Parser struct {
+	maxItemSize uint64
+}
+
+func NewParser(maxItemSize uint64) *Parser {
+	return &Parser{
+		maxItemSize: maxItemSize,
+	}
+}
+
+func (p *Parser) ParseLine(line string, payload io.Reader) (Op, error) {
 	if line == "" {
 		return nil, core.ErrBadCommand
 	}
@@ -98,17 +107,17 @@ func ParseLine(line string, payload io.Reader) (Op, error) {
 	cmd := strings.ToLower(parts[0])
 	switch cmd {
 	case "cache_memlimit":
-		return parseCacheMemLimit(line, parts)
+		return p.parseCacheMemLimit(line, parts)
 	case "delete":
-		return parseDelete(line, parts)
+		return p.parseDelete(line, parts)
 	case "get":
-		return parseGet(line, parts, false)
+		return p.parseGet(line, parts, false)
 	case "gets":
-		return parseGet(line, parts, true)
+		return p.parseGet(line, parts, true)
 	case "quit":
 		return QuitOp{}, nil
 	case "set":
-		return parseSet(line, parts, payload)
+		return p.parseSet(line, parts, payload)
 	case "stats":
 		return StatsOp{}, nil
 	case "version":
@@ -124,7 +133,7 @@ func ParseLine(line string, payload io.Reader) (Op, error) {
 	return nil, core.ErrBadCommand
 }
 
-func parseCacheMemLimit(line string, parts []string) (*CacheMemLimitOp, error) {
+func (p *Parser) parseCacheMemLimit(line string, parts []string) (*CacheMemLimitOp, error) {
 	if len(parts) < 2 {
 		return nil, core.ClientError("bad cache_memlimit command '%s'", line)
 	}
@@ -146,7 +155,7 @@ func parseCacheMemLimit(line string, parts []string) (*CacheMemLimitOp, error) {
 	}, nil
 }
 
-func parseDelete(line string, parts []string) (*DeleteOp, error) {
+func (p *Parser) parseDelete(line string, parts []string) (*DeleteOp, error) {
 	if len(parts) < 2 {
 		return nil, core.ClientError("bad delete command '%s'", line)
 	}
@@ -164,7 +173,7 @@ func parseDelete(line string, parts []string) (*DeleteOp, error) {
 	}, nil
 }
 
-func parseGet(line string, parts []string, unique bool) (*GetOp, error) {
+func (p *Parser) parseGet(line string, parts []string, unique bool) (*GetOp, error) {
 	if len(parts) < 2 {
 		return nil, core.ClientError("bad get command '%s'", line)
 	}
@@ -177,7 +186,7 @@ func parseGet(line string, parts []string, unique bool) (*GetOp, error) {
 	return &GetOp{Keys: keys, Unique: unique}, nil
 }
 
-func parseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
+func (p *Parser) parseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
 	if len(parts) < 5 {
 		return nil, core.ClientError("bad set command '%s'", line)
 	}
@@ -202,14 +211,14 @@ func parseSet(line string, parts []string, payload io.Reader) (*SetOp, error) {
 		return nil, core.ClientError("bad bytes length '%s': %s", line, err)
 	}
 
-	if length > maxPayloadSizeBytes {
-		return nil, core.ClientError("length of %d greater than max item size of %d", length, maxPayloadSizeBytes)
+	if length > p.maxItemSize {
+		return nil, core.ErrObjectTooLarge
 	}
 
 	bytes := make([]byte, length+2) // payload and trailing \r\n
 	n, err := io.ReadFull(payload, bytes)
 	if err != nil {
-		return nil, core.ClientError("unable to read %d+2 payload bytes, only read %d: %s", length, n, err)
+		return nil, core.ServerError("unable to read %d+2 payload bytes, only read %d: %s", length, n, err)
 	}
 
 	bytes = bytes[:length] // truncate trailing \r\n

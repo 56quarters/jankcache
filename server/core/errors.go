@@ -11,6 +11,8 @@ var (
 	ErrNotFound   = errors.New("NOT_FOUND")
 	ErrServer     = errors.New("SERVER_ERROR")
 	ErrQuit       = errors.New("quit")
+
+	ErrObjectTooLarge = ServerError("object too large for cache")
 )
 
 func ClientError(msg string, args ...any) error {

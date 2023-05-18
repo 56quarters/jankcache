@@ -22,55 +22,55 @@ func NewEncoder(writer io.Writer) *Encoder {
 	}
 }
 
-func (o *Encoder) Line(line string) *Encoder {
-	_, _ = o.writer.Write([]byte(line))
-	_, _ = o.writer.Write(crlf)
-	return o
+func (e *Encoder) Line(line string) *Encoder {
+	_, _ = e.writer.Write([]byte(line))
+	_, _ = e.writer.Write(crlf)
+	return e
 }
 
-func (o *Encoder) Bytes(b []byte) *Encoder {
-	_, _ = o.writer.Write(b)
-	_, _ = o.writer.Write(crlf)
-	return o
+func (e *Encoder) Bytes(b []byte) *Encoder {
+	_, _ = e.writer.Write(b)
+	_, _ = e.writer.Write(crlf)
+	return e
 }
 
-func (o *Encoder) Error(err error) *Encoder {
+func (e *Encoder) Error(err error) *Encoder {
 	if errors.Is(err, core.ErrBadCommand) {
-		return o.Line(err.Error())
+		return e.Line(err.Error())
 	} else if errors.Is(err, core.ErrClient) {
-		return o.Line(err.Error())
+		return e.Line(err.Error())
 	} else if errors.Is(err, core.ErrServer) {
-		return o.Line(err.Error())
+		return e.Line(err.Error())
 	} else if errors.Is(err, core.ErrNotFound) {
-		return o.Line(err.Error())
+		return e.Line(err.Error())
 	}
 
-	return o.Line(core.ServerError(err.Error()).Error())
+	return e.Line(core.ServerError(err.Error()).Error())
 }
 
-func (o *Encoder) Encode(obj MemcachedMarshaller) *Encoder {
-	obj.MarshallMemcached(o)
-	return o
+func (e *Encoder) Encode(obj MemcachedMarshaller) *Encoder {
+	obj.MarshallMemcached(e)
+	return e
 }
 
-func (o *Encoder) Version(version string) *Encoder {
-	return o.Line(fmt.Sprintf("VERSION %s", version))
+func (e *Encoder) Version(version string) *Encoder {
+	return e.Line(fmt.Sprintf("VERSION %s", version))
 }
 
-func (o *Encoder) End() *Encoder {
-	return o.Line("END")
+func (e *Encoder) End() *Encoder {
+	return e.Line("END")
 }
 
-func (o *Encoder) Stored() *Encoder {
-	return o.Line("STORED")
+func (e *Encoder) Stored() *Encoder {
+	return e.Line("STORED")
 }
 
-func (o *Encoder) Deleted() *Encoder {
-	return o.Line("DELETED")
+func (e *Encoder) Deleted() *Encoder {
+	return e.Line("DELETED")
 }
 
-func (o *Encoder) Ok() *Encoder {
-	return o.Line("OK")
+func (e *Encoder) Ok() *Encoder {
+	return e.Line("OK")
 }
 
 type MemcachedMarshaller interface {
