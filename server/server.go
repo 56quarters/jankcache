@@ -9,6 +9,7 @@ import (
 	"github.com/grafana/dskit/services"
 
 	"github.com/56quarters/jankcache/server/cache"
+	"github.com/56quarters/jankcache/server/proto"
 )
 
 type Config struct {
@@ -52,7 +53,8 @@ func New(cfg Config, logger log.Logger) (*Server, error) {
 	metrics.MaxConnections.Store(cfg.Server.MaxConnections)
 
 	rtCtx := NewRuntimeContext()
-	handler := NewHandler(cache.New(cfg.Cache, logger), metrics, rtCtx)
+	parser := proto.NewParser(cfg.Cache.MaxItemSize)
+	handler := NewHandler(cache.New(cfg.Cache, logger), parser, metrics, rtCtx)
 	tcpSrv := NewTCPServer(cfg.Server, handler, metrics, logger)
 
 	srvs := []services.Service{rtCtx, tcpSrv}

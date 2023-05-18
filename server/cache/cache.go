@@ -16,16 +16,22 @@ const secondsInThirtyDays = 60 * 60 * 24 * 30
 const maxNumCounters = 100_000
 
 type Config struct {
-	MaxSizeMb uint64
+	MaxSizeMb   uint64
+	MaxItemSize uint64
 }
 
 func (c *Config) RegisterFlags(prefix string, fs *flag.FlagSet) {
 	fs.Uint64Var(&c.MaxSizeMb, prefix+"max-size-mb", 64, "Max cache size in megabytes")
+	fs.Uint64Var(&c.MaxItemSize, prefix+"max-item-size", 1024*1024, "Max size of a cache entry in bytes")
 }
 
 func (c *Config) Validate() error {
 	if c.MaxSizeMb < 1 {
 		return fmt.Errorf("invalid value for max-size-mb: %d", c.MaxSizeMb)
+	}
+
+	if c.MaxItemSize < 1 {
+		return fmt.Errorf("invalid valid for max-item-size: %d", c.MaxItemSize)
 	}
 
 	return nil

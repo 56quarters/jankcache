@@ -101,13 +101,15 @@ func (b *bufferedConnection) Close() error {
 
 type Handler struct {
 	cache   *cache.Cache
+	parser  *proto.Parser
 	metrics *Metrics
 	rtCtx   *RuntimeContext
 }
 
-func NewHandler(cache *cache.Cache, metrics *Metrics, rtCtx *RuntimeContext) *Handler {
+func NewHandler(cache *cache.Cache, parser *proto.Parser, metrics *Metrics, rtCtx *RuntimeContext) *Handler {
 	return &Handler{
 		cache:   cache,
+		parser:  parser,
 		metrics: metrics,
 		rtCtx:   rtCtx,
 	}
@@ -140,7 +142,7 @@ func (h *Handler) Handle(conn io.ReadWriter) error {
 	// Pass the line we read to the parser as well as the buffered reader since
 	// we'll need to read a payload of bytes (not line delimited) in the case of
 	// a "set" command.
-	op, err := proto.ParseLine(line, wrapped.Reader)
+	op, err := h.parser.ParseLine(line, wrapped.Reader)
 	if err != nil {
 		output.Error(err)
 		return nil
