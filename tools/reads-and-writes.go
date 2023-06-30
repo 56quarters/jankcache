@@ -75,7 +75,7 @@ func main() {
 	// Get a map of all .c and .h filenames to their contents to use for keys and values
 	// to test the cache. Memcached is expected to be checked out in a parallel directory
 	// to jankcache.
-	payloads := getPayloads("../memcached")
+	payloads := getPayloads(os.Args[1])
 	wg := sync.WaitGroup{}
 
 	for batch := 0; batch < numBatches; batch++ {
