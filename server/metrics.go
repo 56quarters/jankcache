@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -22,6 +23,7 @@ type RuntimeSnapshot struct {
 	Pid       int
 	UserCPU   float64
 	SystemCPU float64
+	Threads   int
 }
 
 // RuntimeContext periodically updates runtime specific information used for building Stats.
@@ -33,6 +35,7 @@ type RuntimeContext struct {
 	pid       int
 	userCPU   float64
 	systemCPU float64
+	threads   int
 	mtx       sync.RWMutex
 }
 
@@ -41,6 +44,7 @@ func NewRuntimeContext() *RuntimeContext {
 		startup: time.Now(),
 		now:     time.Now(),
 		pid:     os.Getpid(),
+		threads: runtime.GOMAXPROCS(0),
 		mtx:     sync.RWMutex{},
 	}
 
@@ -66,6 +70,7 @@ func (r *RuntimeContext) loop(ctx context.Context) error {
 			r.now = t
 			r.userCPU = userCPU
 			r.systemCPU = systemCPU
+			r.threads = runtime.GOMAXPROCS(0)
 			r.mtx.Unlock()
 		}
 	}
@@ -81,6 +86,7 @@ func (r *RuntimeContext) Read() RuntimeSnapshot {
 		Pid:       r.pid,
 		UserCPU:   r.userCPU,
 		SystemCPU: r.systemCPU,
+		Threads:   r.threads,
 	}
 }
 
@@ -120,6 +126,7 @@ func NewStats(c *cache.Cache, m *Metrics, r RuntimeSnapshot) Stats {
 		Uptime:     r.Uptime,
 		ServerTime: r.Time,
 		Version:    version,
+		Threads:    r.Threads,
 
 		UserCPU:   r.UserCPU,
 		SystemCPU: r.SystemCPU,
@@ -172,6 +179,7 @@ type Stats struct {
 	Uptime     uint64
 	ServerTime int64
 	Version    string
+	Threads    int
 
 	UserCPU   float64
 	SystemCPU float64
@@ -222,6 +230,7 @@ func (s *Stats) MarshallMemcached(o *proto.Encoder) {
 	o.Line(fmt.Sprintf("STAT %s %d", "uptime", s.Uptime))
 	o.Line(fmt.Sprintf("STAT %s %d", "time", s.ServerTime))
 	o.Line(fmt.Sprintf("STAT %s %s", "version", s.Version))
+	o.Line(fmt.Sprintf("STAT %s %d", "threads", s.Threads))
 
 	o.Line(fmt.Sprintf("STAT %s %f", "rusage_user", s.UserCPU))
 	o.Line(fmt.Sprintf("STAT %s %f", "rusage_system", s.SystemCPU))
