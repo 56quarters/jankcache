@@ -61,6 +61,7 @@ func (r *RuntimeContext) loop(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case t := <-ticker.C:
+			threads := runtime.GOMAXPROCS(0)
 			userCPU, systemCPU, err := getUserSystemCPU()
 			if err != nil {
 				return err
@@ -70,7 +71,7 @@ func (r *RuntimeContext) loop(ctx context.Context) error {
 			r.now = t
 			r.userCPU = userCPU
 			r.systemCPU = systemCPU
-			r.threads = runtime.GOMAXPROCS(0)
+			r.threads = threads
 			r.mtx.Unlock()
 		}
 	}
