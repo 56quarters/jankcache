@@ -3,7 +3,6 @@ module github.com/56quarters/jankcache
 go 1.18
 
 require (
-	github.com/bradfitz/gomemcache v0.0.0-20220106215444-fb4bf637b56d
 	github.com/dgraph-io/ristretto v0.1.0
 	github.com/go-kit/log v0.2.1
 	github.com/grafana/dskit v0.0.0-20220831093637-e414922a81f2
@@ -17,5 +16,3 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab // indirect
 )
-
-replace github.com/bradfitz/gomemcache => github.com/grafana/gomemcache v0.0.0-20220823145208-74a1c5bd8fd5
